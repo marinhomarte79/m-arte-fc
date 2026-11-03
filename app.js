@@ -45,7 +45,8 @@ const sb = window.supabase.createClient(CFG.url, CFG.anonKey, { auth:{ persistSe
 const S = {
   session:null, profile:null, isSuper:false,
   clubs:[], myRoles:{}, club:null, teams:[], team:null, players:[], matches:{}, cur:null,
-  pending:null, layer:'rec', mapHalf:'all', sortI:{k:'saldo',d:-1}, confirm:null,
+  pending:null, layer:'rec', mapHalf:'all', sortI:{k:'saldo',d:-1}, sortS:{k:'saldo',d:-1}, confirm:null,
+  scope:'jogo', season:null, range:'all',
   aiBusy:false, members:[], aiCount:0, admin:{users:null, aiByClub:{}, memCount:{}}, loginErr:'', msg:{},
 };
 const LS='mafc-v2';
@@ -279,6 +280,83 @@ function indiv(m){
 }
 
 /* =========================================================
+   ÉPOCA (1 de Julho a 30 de Junho)
+   ========================================================= */
+function seasonOf(d){ if(!d) return null; const [y,mo]=String(d).split('-').map(Number); return mo>=7?y:y-1; }
+const seasonLabel = y => y==null?'—':`${y}/${String((y+1)%100).padStart(2,'0')}`;
+function seasonsAvail(){ return [...new Set(teamMatches().map(m=>seasonOf(m.date)).filter(x=>x!=null))].sort((a,b)=>b-a); }
+function seasonMatches(){
+  const ss=seasonsAvail(); if(S.season==null||!ss.includes(S.season)) S.season=ss[0]??null;
+  let list=teamMatches().filter(m=>seasonOf(m.date)===S.season).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  if(S.range==='last5') list=list.slice(-5);
+  if(S.range==='30d'){ const lim=new Date(Date.now()-30*864e5).toISOString().slice(0,10); list=list.filter(m=>(m.date||'')>=lim); }
+  return list;
+}
+function seasonPseudo(list){
+  const ev=[]; let us=0,opp=0,unk=false;
+  for(const m of list){ for(const e of m.events) ev.push({...e,id:m.id+':'+e.id,mid:m.id}); const p=possNow(m); us+=p.us; opp+=p.opp; if(m.scoreUnknown) unk=true; }
+  return { id:'__season', season:true, home:S.team?S.team.name:'', opp:'', date:'', halfLen:(S.team&&S.team.half_len)||45, events:ev,
+    clock:{half:2,running:false,startedAt:null,base:0}, poss:{cur:null,since:null,us,opp}, scoreUnknown:unk&&!ev.some(e=>e.type==='golo'||e.type==='golo_adv'),
+    note:'', ai:null, n:list.length, list };
+}
+const rangeLabel = () => ({all:'época inteira','30d':'últimos 30 dias',last5:'últimos 5 jogos'})[S.range];
+function curAnalysis(){ return S.scope==='epoca' ? seasonPseudo(seasonMatches()) : M(); }
+function scopeBar(){
+  const ss=seasonsAvail();
+  return `<div class="row" style="gap:10px">
+    <span class="seg"><button aria-pressed="${S.scope==='jogo'}" data-scope="jogo">Este jogo</button><button aria-pressed="${S.scope==='epoca'}" data-scope="epoca">Época</button></span>
+    ${S.scope==='epoca'?`<select class="inp" id="selSeason" style="width:auto" aria-label="Época">${ss.map(y=>`<option value="${y}" ${y===S.season?'selected':''}>Época ${seasonLabel(y)}</option>`).join('')||'<option>Sem jogos</option>'}</select>
+    <span class="seg">${[['all','Época'],['30d','30 dias'],['last5','Últimos 5']].map(([k,l])=>`<button aria-pressed="${S.range===k}" data-range="${k}">${l}</button>`).join('')}</span>`:''}
+  </div>`;
+}
+function seasonPlayers(list){
+  const acc={};
+  for(const p of players()) acc[p.id]={id:p.id,name:p.name,num:p.num,gk:p.pos==='GR',jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[]};
+  for(const m of list){
+    const rows=Object.fromEntries(indiv(m).map(r=>[r.id,r]));
+    for(const id of new Set([...Object.keys(acc),...Object.keys(rows)])){
+      const r=rows[id]; const a=acc[id]||(acc[id]={id,name:r?r.name:'?',num:'',gk:false,jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[]});
+      if(r && r.act>0){ a.jogos++; for(const k of ['rec','perda','pe','fc','fs','shot','golos','saldo']) a[k]+=r[k]; a.series.push(r.saldo); } else a.series.push(null);
+    }
+  }
+  for(const a of Object.values(acc)){ const j=a.jogos||1; a.rec_j=a.rec/j; a.perda_j=a.perda/j; a.pe_j=a.pe/j; a.saldo_j=a.jogos?a.saldo/j:0; }
+  return Object.values(acc);
+}
+function spark(series){
+  const pts=series.map((v,i)=>[i,v]).filter(p=>p[1]!=null); if(pts.length<2) return '<span class="muted small">—</span>';
+  const W=96,H=26,n=Math.max(1,series.length-1), vals=pts.map(p=>p[1]), mn=Math.min(0,...vals), mx=Math.max(0,...vals), rg=(mx-mn)||1;
+  const X=i=>2+i/n*(W-4), Y=v=>H-3-(v-mn)/rg*(H-6), d=pts.map((p,k)=>(k?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join(' '), last=pts[pts.length-1];
+  const col=last[1]>=0?'var(--good)':'var(--bad)';
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Saldo jogo a jogo: ${vals.join(', ')}"><line x1="2" x2="${W-2}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><path d="${d}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round"/><circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="2.4" fill="${col}"/></svg>`;
+}
+function vIndSeason(){
+  const list=seasonMatches();
+  if(!list.length) return `<div class="view"><div class="mhead"><div><h1>Época</h1><div class="meta">${esc(S.team.name)}</div></div><div class="sp">${scopeBar()}</div></div><div class="card empty"><h2>Sem jogos neste período</h2><p class="muted">Escolha outra época ou outro filtro.</p></div></div>`;
+  const rows=seasonPlayers(list).filter(r=>r.jogos>0||!r.gk), k=S.sortS.k, d=S.sortS.d;
+  rows.sort((a,b)=>k==='name'?a.name.localeCompare(b.name)*d:((a[k]||0)-(b[k]||0))*d);
+  const th=(key,l,cls='')=>`<th class="sortable ${cls}" data-sorts="${key}" ${k===key?`aria-sort="${d>0?'ascending':'descending'}"`:''}>${l}${k===key?(d>0?' ▲':' ▼'):''}</th>`;
+  const f1=v=>v.toFixed(1).replace('.',','), sg=v=>(v>0?'+':'')+v, sc=v=>v>0?'var(--good)':v<0?'var(--bad)':'var(--muted)';
+  const mx={rec:Math.max(1,...rows.map(r=>r.rec)),perda:Math.max(1,...rows.map(r=>r.perda)),pe:Math.max(1,...rows.map(r=>r.pe))};
+  const tot=key=>rows.reduce((a,r)=>a+r[key],0);
+  return `<div class="view">
+  <div class="mhead"><div><h1>Época ${seasonLabel(S.season)}</h1><div class="meta">${esc(S.team.name)} · ${list.length} jogo(s) · ${rangeLabel()} · de ${esc(fmtDate(list[0].date))} a ${esc(fmtDate(list[list.length-1].date))}</div></div>
+    <div class="sp row">${scopeBar()}<button class="btn" data-exp="epoca">Exportar época (CSV)</button></div></div>
+  <section class="card"><div class="tscroll"><table class="st">
+    <thead><tr><th></th><th></th><th colspan="2" class="band">Recuperações</th><th colspan="2">Perdas</th><th colspan="2" class="band">Passes errados</th><th>Faltas</th><th>Faltas</th><th></th><th></th><th colspan="2" class="band">Saldo de bola</th><th></th></tr>
+    <tr>${th('name','Jogador')}${th('jogos','Jogos')}${th('rec','Total','band')}${th('rec_j','/jogo','band')}${th('perda','Total')}${th('perda_j','/jogo')}${th('pe','Total','band')}${th('pe_j','/jogo','band')}${th('fc','Com.')}${th('fs','Sofr.')}${th('shot','Remates')}${th('golos','Golos')}${th('saldo','Total','band')}${th('saldo_j','/jogo','band')}<th>Evolução</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}${r.gk?' <span class="role">GR</span>':''}</td><td>${r.jogos}</td>
+      <td class="band">${heat(r.rec,mx.rec,'var(--good)')}</td><td class="band">${f1(r.rec_j)}</td><td>${heat(r.perda,mx.perda,'var(--red)')}</td><td>${f1(r.perda_j)}</td><td class="band">${heat(r.pe,mx.pe,'var(--pe)')}</td><td class="band">${f1(r.pe_j)}</td>
+      <td>${r.fc}</td><td>${r.fs}</td><td>${r.shot}</td><td>${r.golos||''}</td>
+      <td class="band"><b style="color:${sc(r.saldo)}">${sg(r.saldo)}</b></td><td class="band" style="color:${sc(r.saldo_j)}">${r.saldo_j>0?'+':''}${f1(r.saldo_j)}</td><td>${spark(r.series)}</td></tr>`).join('')}
+    <tr><td><b>TOTAL EQUIPA</b></td><td>${list.length}</td><td class="tot band">${tot('rec')}</td><td class="band">${f1(tot('rec')/list.length)}</td><td class="tot">${tot('perda')}</td><td>${f1(tot('perda')/list.length)}</td><td class="tot band">${tot('pe')}</td><td class="band">${f1(tot('pe')/list.length)}</td><td class="tot">${tot('fc')}</td><td class="tot">${tot('fs')}</td><td class="tot">${tot('shot')}</td><td class="tot">${tot('golos')}</td><td class="tot band">${sg(tot('saldo'))}</td><td class="band">${f1(tot('saldo')/list.length)}</td><td></td></tr>
+    </tbody></table></div>
+    <p class="note" style="margin:8px 0 0">"Jogos" conta os jogos em que o jogador tem pelo menos uma acção registada. Médias /jogo calculadas sobre esses jogos. Evolução = saldo de bola jogo a jogo (recuperações − perdas − passes errados), o ponto final é o jogo mais recente.</p></section>
+  <section class="card"><h2>Jogos incluídos</h2><div class="tscroll"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Acções</th><th>Rec.</th><th>Perdas</th><th>P. err.</th><th>Saldo</th><th></th></tr></thead><tbody>
+    ${[...list].reverse().map(m=>{ const s=stats(m), sl=s.rec.t-s.perda.t-s.pe.t, scr=score(m); return `<tr><td class="l">${esc(fmtDate(m.date))}</td><td class="l">${esc(m.home)} ${scr?scr.join('–'):'vs'} ${esc(m.opp)}</td><td>${m.events.length}</td><td>${s.rec.t}</td><td>${s.perda.t}</td><td>${s.pe.t}</td><td><b style="color:${sc(sl)}">${sg(sl)}</b></td><td><button class="btn sm" data-openscope="${m.id}">Ver jogo</button></td></tr>`; }).join('')}
+  </tbody></table></div></section></div>`;
+}
+
+/* =========================================================
    RENDER
    ========================================================= */
 const VIEWS=[['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
@@ -298,6 +376,8 @@ function render(){
   if(!S.team){ app.innerHTML=`<div class="card empty"><h2>Sem equipas</h2><p class="muted">${isAdmin()?'Crie a primeira equipa ou escalão na área Clube.':'O clube ainda não tem equipas criadas.'}</p>${isAdmin()?'<a class="btn pri" href="#clube">Abrir Clube</a>':''}</div>`; return; }
   const m=M();
   if(v==='plantel') app.innerHTML=vPlantel();
+  else if(v==='analise'&&S.scope==='epoca') app.innerHTML=vAnaliseSeason();
+  else if(v==='individual'&&S.scope==='epoca') app.innerHTML=vIndSeason();
   else if(v==='jogos'||!m) app.innerHTML=vJogos();
   else if(v==='registo') app.innerHTML=vRegisto(m);
   else if(v==='analise') app.innerHTML=vAnalise(m);
@@ -381,6 +461,11 @@ function heat(v,max,color){ if(!v) return `<span class="heat muted">0</span>`; c
 function fmtDate(d){ if(!d) return ''; const [y,mo,da]=String(d).split('-'); return da&&mo&&y?`${da}/${mo}/${y}`:d; }
 function fmtAi(t){ return esc(t).replace(/^#{1,4}\s*(.+)$/gm,'<h4>$1</h4>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
 
+function vAnaliseSeason(){
+  const list=seasonMatches();
+  if(!list.length) return `<div class="view"><div class="mhead"><div><h1>Época</h1><div class="meta">${esc(S.team.name)}</div></div><div class="sp">${scopeBar()}</div></div><div class="card empty"><h2>Sem jogos neste período</h2><p class="muted">Escolha outra época ou outro filtro.</p></div></div>`;
+  return vAnalise(seasonPseudo(list));
+}
 function vAnalise(m){
   const s=stats(m),sc=score(m),ins=insights(m,s);
   const zrows=[['Recuperações de bola','rec','var(--good)'],['Perdas de bola','perda','var(--red)'],['Passes errados','pe','var(--pe)'],['Faltas sofridas','fs','#38BDF8'],['Faltas cometidas','fc','#7B3FE4']];
@@ -397,10 +482,13 @@ function vAnalise(m){
   const consAny=CONS.some(([k])=>s.cons.pe[k]+s.cons.perda[k]);
   const aiOn=S.club&&(S.club.ai_enabled||S.isSuper)&&canEdit();
   return `<div class="view">
-  <div class="mhead"><div><h1>${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}</h1>
+  ${m.season?`<div class="mhead"><div><h1>${esc(m.home)} <em>Época ${seasonLabel(S.season)}</em></h1>
+    <div class="meta">${m.n} jogo(s) · ${rangeLabel()} · ${m.events.length} acções · golos ${s.goals} marcados, ${s.goalsAdv} sofridos</div></div>
+    <div class="sp row">${scopeBar()}<button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`
+  :`<div class="mhead"><div><h1>${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}</h1>
     <div class="meta">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''} · ${esc(S.team?S.team.name:'')} · ${m.events.length} acções${m.locked?' · trancado':''}${m.scoreUnknown&&!sc?' · resultado não registado':''}</div></div>
-    <div class="sp row"><button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>
-  ${m.note?`<div class="banner">${esc(m.note)}</div>`:''}
+    <div class="sp row">${scopeBar()}<button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
+  ${m.note&&!m.season?`<div class="banner">${esc(m.note)}</div>`:''}
   <div class="kpis">
     <div class="kpi"><span>Posse</span><b>${s.poss!=null?s.poss+'%':'—'}</b><small>${s.poss!=null?'adv. '+(100-s.poss)+'%':'não cronometrada'}</small></div>
     <div class="kpi"><span>Remates</span><b>${sh.t}</b><small>${sh.baliza[0]+sh.baliza[1]} à baliza</small></div>
@@ -436,8 +524,8 @@ function vAnalise(m){
       <tr><td>Defesas completas</td><td class="tot">${s.gk.dc}</td></tr><tr><td>Defesas incompletas</td><td class="tot">${s.gk.di}</td></tr><tr><td>Defesas p/ canto</td><td class="tot">${s.gk.ca}</td></tr>
       <tr><td>Cartões ${esc(short(m.home))} (A / V)</td><td class="tot">${s.cards.am} / ${s.cards.vm}</td></tr><tr><td>Cartões adv. (A / V)</td><td class="tot">${s.cards.amA} / ${s.cards.vmA}</td></tr><tr><td>Remates adv. (à baliza)</td><td class="tot">${s.shotsAdv} (${s.shotsAdvOn})</td></tr></tbody></table></div></section>
   </div>
-  <section class="card"><h2>Relatório técnico com IA<span class="sp"></span>${aiOn&&!matchRO(m)?`<button class="btn pri" data-ai ${S.aiBusy?'disabled':''}>${S.aiBusy?'A escrever… (até 1 minuto)':(m.ai?'Gerar novo relatório':'Gerar relatório')}</button>`:''}</h2>
-    ${m.ai?`<div class="ai">${fmtAi(m.ai.text)}</div><p class="note">Gerado em ${new Date(m.ai.at).toLocaleString('pt-PT')}</p>`:`<p class="note">${aiOn?'Envia o resumo estatístico deste jogo à IA e recebe uma análise de treinador: diagnóstico, padrões, plano de treino da semana e ajustes para o próximo jogo.':'O relatório com IA não está incluído no plano deste clube. Fale com a M Arte Design para o activar.'}</p>`}</section>
+  ${m.season?'':`<section class="card"><h2>Relatório técnico com IA<span class="sp"></span>${aiOn&&!matchRO(m)?`<button class="btn pri" data-ai ${S.aiBusy?'disabled':''}>${S.aiBusy?'A escrever… (até 1 minuto)':(m.ai?'Gerar novo relatório':'Gerar relatório')}</button>`:''}</h2>
+    ${m.ai?`<div class="ai">${fmtAi(m.ai.text)}</div><p class="note">Gerado em ${new Date(m.ai.at).toLocaleString('pt-PT')}</p>`:`<p class="note">${aiOn?'Envia o resumo estatístico deste jogo à IA e recebe uma análise de treinador: diagnóstico, padrões, plano de treino da semana e ajustes para o próximo jogo.':'O relatório com IA não está incluído no plano deste clube. Fale com a M Arte Design para o activar.'}</p>`}</section>`}
   </div>`;
 }
 function vIndividual(m){
@@ -448,7 +536,7 @@ function vIndividual(m){
   const th=(key,l,cls='')=>`<th class="sortable ${cls}" data-sort="${key}" ${k===key?`aria-sort="${d>0?'ascending':'descending'}"`:''}>${l}${k===key?(d>0?' ▲':' ▼'):''}</th>`;
   const tot=c=>rows.reduce((a,r)=>a+r[c],0), gk=indiv(m).filter(r=>r.gk);
   const gkRows=gk.map(r=>{ const g=t=>[1,2].map(h=>count(m.events,e=>e.type===t&&e.p===r.id&&e.half===h)); return `<tr><td><b>${esc(r.name)}</b></td>${[g('gr_dc'),g('gr_di'),g('gr_ca'),g('pe'),g('fs')].map((a,i)=>`<td class="${i%2?'':'band'}">${a[0]}</td><td class="${i%2?'':'band'}">${a[1]}</td>`).join('')}</tr>`; }).join('');
-  return `<div class="view"><div class="mhead"><div><h1>Análise individual</h1><div class="meta">${esc(m.home)} vs ${esc(m.opp)} · ${esc(fmtDate(m.date))} · clique num cabeçalho para ordenar</div></div><div class="sp row"><button class="btn" data-exp="individual">Exportar (CSV)</button></div></div>
+  return `<div class="view"><div class="mhead"><div><h1>Análise individual</h1><div class="meta">${esc(m.home)} vs ${esc(m.opp)} · ${esc(fmtDate(m.date))} · clique num cabeçalho para ordenar</div></div><div class="sp row">${scopeBar()}<button class="btn" data-exp="individual">Exportar (CSV)</button></div></div>
   <section class="card"><div class="tscroll"><table class="st"><thead><tr><th></th>${cols.map(([c,l],i)=>`<th colspan="3" class="${i%2?'':'band'}">${l}</th>`).join('')}<th></th><th></th></tr>
     <tr>${th('name','Jogador')}${cols.map(([c],i)=>`<th class="${i%2?'':'band'}">1ª</th><th class="${i%2?'':'band'}">2ª</th>${th(c,'T',i%2?'':'band')}`).join('')}${th('golos','Golos')}${th('saldo','Saldo')}</tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}</td>${cols.map(([c,,col],i)=>`<td class="${i%2?'':'band'}">${heat(r[c+'1'],mx[c],col)}</td><td class="${i%2?'':'band'}">${heat(r[c+'2'],mx[c],col)}</td><td class="${i%2?'':'band'}"><b>${r[c]}</b></td>`).join('')}<td>${r.golos||''}</td><td><b style="color:${r.saldo>0?'var(--good)':r.saldo<0?'var(--bad)':'var(--muted)'}">${r.saldo>0?'+':''}${r.saldo}</b></td></tr>`).join('')}
@@ -621,9 +709,13 @@ function vConta(){
    ========================================================= */
 function download(filename,data,type){ const b=new Blob([data],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=filename; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
 function csv(rows){ return '﻿'+rows.map(r=>r.map(v=>{ v=String(v??''); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(';')).join('\r\n'); }
-const slug = m => (m.home+'-vs-'+m.opp+'-'+(m.date||'')).replace(/\s+/g,'-').replace(/[^\w\-]/g,'');
+const slug = m => (m.season?(m.home+'-epoca-'+seasonLabel(S.season)):(m.home+'-vs-'+m.opp+'-'+(m.date||''))).replace(/[\s/]+/g,'-').replace(/[^\w\-]/g,'');
 async function exp(kind){
-  const m=M();
+  const m=curAnalysis();
+  if(kind==='epoca'){ const list=seasonMatches(), r=[['Jogador','Jogos','Recuperações','Rec/jogo','Perdas','Perdas/jogo','Passes errados','P.err/jogo','Faltas com.','Faltas sofr.','Remates','Golos','Saldo','Saldo/jogo']];
+    const f=v=>v.toFixed(2).replace('.',',');
+    for(const x of seasonPlayers(list)) r.push([x.name,x.jogos,x.rec,f(x.rec_j),x.perda,f(x.perda_j),x.pe,f(x.pe_j),x.fc,x.fs,x.shot,x.golos,x.saldo,f(x.saldo_j)]);
+    return download('epoca-'+seasonLabel(S.season).replace('/','-')+'-'+(S.team.name||'').replace(/\s+/g,'-')+'.csv',csv(r),'text/csv'); }
   if(kind==='backup'){
     const [{data:clubs},{data:teams},{data:pls},{data:mts}] = await Promise.all([sb.from('clubs').select('*'),sb.from('teams').select('*'),sb.from('players').select('*'),sb.from('matches').select('*')]);
     return download('m-arte-fc-backup-'+today()+'.json', JSON.stringify({version:2,exported_at:new Date().toISOString(),clubs,teams,players:pls,matches:mts},null,1),'application/json');
@@ -683,6 +775,10 @@ document.addEventListener('click', async ev=>{
   else if(d.del) delEvent(d.del);
   else if(d.layer){ S.layer=d.layer; render(); }
   else if(d.mh){ S.mapHalf=d.mh; render(); }
+  else if(d.scope){ S.scope=d.scope; render(); }
+  else if(d.range){ S.range=d.range; render(); }
+  else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
+  else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
   else if(d.sort){ S.sortI=S.sortI.k===d.sort?{k:d.sort,d:-S.sortI.d}:{k:d.sort,d:d.sort==='name'?1:-1}; render(); }
   else if(d.open){ S.cur=d.open; S.pending=null; if(t.tagName!=='A') location.hash='#'+(canEdit()?'registo':'analise'); render(); }
   else if(d.conf){ S.confirm=d.conf; render(); }
@@ -756,6 +852,7 @@ document.addEventListener('change', async ev=>{
   const el=ev.target, d=el.dataset;
   if(el.id==='selClub'){ await selectClub(el.value); return; }
   if(el.id==='selTeam'){ selectTeam(el.value); return; }
+  if(el.id==='selSeason'){ S.season=+el.value; render(); return; }
   if(d.pf){ const p=S.players.find(x=>x.id===d.id); if(!p) return; p[d.pf]=el.value.trim(); const { error }=await sb.from('players').update({[d.pf]:p[d.pf]}).eq('id',p.id); if(error) toast(error.message); else toast('Plantel gravado.'); return; }
   if(d.tf){ const t=S.teams.find(x=>x.id===d.id); const v=d.tf==='half_len'?+el.value:el.value.trim(); const { error }=await sb.from('teams').update({[d.tf]:v}).eq('id',t.id); if(error) toast(error.message); else { t[d.tf]=v; renderHeader(); toast('Equipa gravada.'); } return; }
   if(d.role){ const { error }=await sb.from('memberships').update({role:el.value}).eq('club_id',S.club.id).eq('user_id',d.role); if(error) toast(error.message); else { toast('Perfil alterado.'); loadClubAdmin(); } return; }
