@@ -768,10 +768,12 @@ function vCallup(){
       <button type="button" class="btn sm" data-cuall="B">Todos no banco</button><button type="button" class="btn sm" data-cuall="">Limpar</button></div>
     ${ps.length?`<div class="cu-list">${ps.map(p=>`<div class="cu-row"><span class="mono muted">${esc(p.num||'')}</span><span><b>${esc(p.name)}</b>${p.pos?` <span class="role">${esc(p.pos)}</span>`:''}</span>
       <span class="seg" data-curow="${p.id}">${[['T','Titular'],['B','Banco'],['','Fora']].map(([k,l])=>`<button type="button" aria-pressed="${(c[p.id]||'')===k}" data-cu="${p.id}" data-cv="${k}">${l}</button>`).join('')}</span></div>`).join('')}</div>
-    <p class="note" style="margin:8px 0 0">Os titulares entram no campo pela ordem das posições (GR, DEF, MED, AV). Pode ajustar a posição de cada um depois, no separador Individual → "Editar onze e formação". Se não escolher ninguém, a app sugere o onze no fim do jogo.</p>`
+    <p class="note" style="margin:8px 0 0">Máximo de ${maxTit()} titulares (conforme a formação) e ${MAX_BENCH} suplentes. Os titulares entram no campo pela ordem das posições (GR, DEF, MED, AV). Pode ajustar a posição de cada um depois, no separador Individual → "Editar onze e formação". Se não escolher ninguém, a app sugere o onze no fim do jogo.</p>`
     :'<p class="note">O plantel desta equipa está vazio. Adicione jogadores no separador Plantel.</p>'}`;
 }
-function cuCountTxt(nT,nB){ const need=formSize(S.cuForm||'4-4-2'), c=S.callup||{}; const gk=players().some(p=>p.pos==='GR'&&c[p.id]==='T'); return `Titulares ${nT}/${need} · Banco ${nB}${nT&&!gk?' · sem GR titular':''}`; }
+const MAX_TIT=11, MAX_BENCH=9;
+const maxTit = () => Math.min(MAX_TIT, formSize(S.cuForm||'4-4-2'));
+function cuCountTxt(nT,nB){ const need=formSize(S.cuForm||'4-4-2'), c=S.callup||{}; const gk=players().some(p=>p.pos==='GR'&&c[p.id]==='T'); return `Titulares ${nT}/${Math.min(MAX_TIT,need)} · Banco ${nB}/${MAX_BENCH}${nT&&!gk?' · sem GR titular':''}`; }
 function cuRefresh(){ const ps=players(), c=S.callup||{}; const nT=ps.filter(p=>c[p.id]==='T').length, nB=ps.filter(p=>c[p.id]==='B').length; const el=$('cuCount'); if(el){ el.textContent=cuCountTxt(nT,nB); el.style.background=nT===formSize(S.cuForm)?'color-mix(in srgb,var(--good) 18%,var(--card))':''; }
   document.querySelectorAll('[data-cu]').forEach(b=>b.setAttribute('aria-pressed',String((c[b.dataset.cu]||'')===b.dataset.cv))); }
 function vPlantel(){
@@ -988,9 +990,16 @@ document.addEventListener('click', async ev=>{
   else if(d.scope){ S.scope=d.scope; render(); }
   else if(d.range){ S.range=d.range; render(); }
   else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
-  else if(d.cu!==undefined&&d.cv!==undefined){ S.callup=S.callup||{}; S.callup[d.cu]=d.cv; cuRefresh(); return; }
-  else if(d.cuall!==undefined){ S.callup={}; if(d.cuall) for(const p of players()) S.callup[p.id]=d.cuall; cuRefresh(); return; }
-  else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else lu.bench.push(d.lubench); S.luOpen=true; touch(m); render(); }
+  else if(d.cu!==undefined&&d.cv!==undefined){ S.callup=S.callup||{}; const c=S.callup;
+    if(c[d.cu]!==d.cv){ const nT=Object.values(c).filter(v=>v==='T').length, nB=Object.values(c).filter(v=>v==='B').length, maxT=maxTit();
+      if(d.cv==='T'&&nT>=maxT){ toast(`Máximo de ${maxT} titulares (formação ${S.cuForm}). Passe um titular para o banco ou para fora primeiro.`); return; }
+      if(d.cv==='B'&&nB>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes no banco.`); return; } }
+    c[d.cu]=d.cv; cuRefresh(); return; }
+  else if(d.cuall!==undefined){ if(!d.cuall){ S.callup={}; cuRefresh(); return; }
+    const c=S.callup=S.callup||{}; let nB=Object.values(c).filter(v=>v==='B').length, left=0;
+    for(const p of players().filter(p=>p.active!==false)){ if(c[p.id]) continue; if(nB<MAX_BENCH){ c[p.id]='B'; nB++; } else left++; }
+    if(left) toast(`Banco completo (${MAX_BENCH}). ${left} jogador(es) ficaram fora.`); cuRefresh(); return; }
+  else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else { if(lu.bench.length>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes no banco.`); return; } lu.bench.push(d.lubench); } S.luOpen=true; touch(m); render(); }
   else if(d.autom){ S.autoM=d.autom; render(); }
   else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
   else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
@@ -1024,7 +1033,9 @@ document.addEventListener('submit', async ev=>{
   if(f.id==='newMatch'){
     const row={club_id:S.club.id,team_id:S.team.id,home:g('nm-home')||S.club.name,opp:g('nm-opp')||'Adversário',date:g('nm-date')||null,time:g('nm-time'),comp:g('nm-comp'),half_len:+g('nm-half')||45,status:'nova',
       data:{clock:{half:1,running:false,startedAt:null,base:0},poss:{cur:null,since:null,us:0,opp:0},events:[]}};
-    const cu=S.callup||{}; if(Object.values(cu).some(v=>v==='T'||v==='B')){ row.data.lineup=buildLineup(cu,S.cuForm||'4-4-2'); }
+    const cu=S.callup||{}; const nT=Object.values(cu).filter(v=>v==='T').length, nB=Object.values(cu).filter(v=>v==='B').length;
+    if(nT>maxTit()||nB>MAX_BENCH){ toast(`Convocatória inválida: máximo ${maxTit()} titulares e ${MAX_BENCH} suplentes.`); return; }
+    if(Object.values(cu).some(v=>v==='T'||v==='B')){ row.data.lineup=buildLineup(cu,S.cuForm||'4-4-2'); }
     const { data, error } = await sb.from('matches').insert(row).select().single();
     if(error){ toast('Não foi possível criar o jogo: '+error.message); return; }
     S.callup={};
@@ -1075,7 +1086,9 @@ document.addEventListener('change', async ev=>{
     else if(d.luslot!==undefined){ const k=+d.luslot, v=el.value||null; const j=lu.slots.indexOf(v); if(v&&j>=0&&j!==k) lu.slots[j]=lu.slots[k]||null; lu.slots[k]=v; }
     else { lu.override=lu.override||{}; if(el.value==='') delete lu.override[d.luov]; else lu.override[d.luov]=Math.max(0,Math.min(10,+el.value)); }
     touch(m); render(); return; }
-  if(el.id==='cuForm'){ S.cuForm=el.value; cuRefresh(); return; }
+  if(el.id==='cuForm'){ const nT=Object.values(S.callup||{}).filter(v=>v==='T').length, n=Math.min(MAX_TIT,formSize(el.value));
+    if(nT>n){ toast(`A formação ${el.value} só tem ${n} lugares e já há ${nT} titulares. Retire ${nT-n} titular(es) primeiro.`); el.value=S.cuForm; return; }
+    S.cuForm=el.value; cuRefresh(); return; }
   if(el.id==='selSeason'){ S.season=+el.value; render(); return; }
   if(d.pf){ const p=S.players.find(x=>x.id===d.id); if(!p) return; p[d.pf]=el.value.trim(); const { error }=await sb.from('players').update({[d.pf]:p[d.pf]}).eq('id',p.id); if(error) toast(error.message); else toast('Plantel gravado.'); return; }
   if(d.tf){ const t=S.teams.find(x=>x.id===d.id); const v=d.tf==='half_len'?+el.value:el.value.trim(); const { error }=await sb.from('teams').update({[d.tf]:v}).eq('id',t.id); if(error) toast(error.message); else { t[d.tf]=v; renderHeader(); toast('Equipa gravada.'); } return; }
