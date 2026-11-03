@@ -45,7 +45,7 @@ const sb = window.supabase.createClient(CFG.url, CFG.anonKey, { auth:{ persistSe
 const S = {
   session:null, profile:null, isSuper:false,
   clubs:[], myRoles:{}, club:null, teams:[], team:null, players:[], matches:{}, cur:null,
-  pending:null, layer:'rec', mapHalf:'all', sortI:{k:'saldo',d:-1}, sortS:{k:'saldo',d:-1}, confirm:null,
+  pending:null, layer:'rec', mapHalf:'all', sortI:{k:'saldo',d:-1}, sortS:{k:'saldo',d:-1}, confirm:null, autoM:null,
   scope:'jogo', season:null, range:'all',
   aiBusy:false, members:[], aiCount:0, admin:{users:null, aiByClub:{}, memCount:{}}, loginErr:'', msg:{},
 };
@@ -128,10 +128,10 @@ function fromRow(r){
   const d=r.data||{};
   return { id:r.id, team_id:r.team_id, home:r.home, opp:r.opp, date:r.date, time:r.time, comp:r.comp, halfLen:r.half_len, status:r.status, locked:r.locked,
     clock:d.clock||{half:1,running:false,startedAt:null,base:0}, poss:d.poss||{cur:null,since:null,us:0,opp:0}, events:d.events||[],
-    scoreUnknown:!!d.scoreUnknown, note:d.note||'', ai:d.ai||null, updatedAt:Date.parse(r.updated_at)||0 };
+    scoreUnknown:!!d.scoreUnknown, note:d.note||'', ai:d.ai||null, self:d.self||null, updatedAt:Date.parse(r.updated_at)||0 };
 }
 function toRow(m){ return { home:m.home, opp:m.opp, date:m.date||null, time:m.time||'', comp:m.comp||'', half_len:m.halfLen, status:m.status,
-  data:{ clock:m.clock, poss:m.poss, events:m.events, scoreUnknown:m.scoreUnknown, note:m.note, ai:m.ai } }; }
+  data:{ clock:m.clock, poss:m.poss, events:m.events, scoreUnknown:m.scoreUnknown, note:m.note, ai:m.ai, self:m.self||null } }; }
 
 /* ---------- gravação com fila e reenvio ---------- */
 const timers={}, chains={}, dirty=new Set();
@@ -357,9 +357,103 @@ function vIndSeason(){
 }
 
 /* =========================================================
+   AUTOANÁLISE — avaliação do desempenho da própria equipa
+   ========================================================= */
+const AREAS=[['org_of','Organização ofensiva'],['org_def','Organização defensiva'],['tr_def','Transição ataque → defesa'],['tr_of','Transição defesa → ataque'],['bp','Bolas paradas'],['atit','Atitude e intensidade']];
+const clamp01 = v => Math.max(0,Math.min(1,v));
+function kpis(m){
+  const s=stats(m), n=m.season?Math.max(1,m.n):1, pct=(a,b)=>b?a/b*100:null;
+  const R=s.rec.t, L=s.perda.t+s.pe.t, lossDef=s.perda.def[0]+s.perda.def[1]+s.pe.def[0]+s.pe.def[1];
+  const on=s.shots.baliza[0]+s.shots.baliza[1], atkShot=s.atk.cons.rb[0]+s.atk.cons.rb[1]+s.atk.cons.rfi[0]+s.atk.cons.rfi[1];
+  const sc=score(m);
+  return [
+    {k:'saldo',l:'Saldo de bola por jogo',v:(R-L)/n,fmt:v=>(v>0?'+':'')+v.toFixed(1).replace('.',','),meta:5,dir:1,metaTxt:'≥ +5',sc:v=>clamp01((v+10)/30),ok:R+L>0},
+    {k:'recof',l:'Recuperações no último terço',v:pct(s.rec.ofen[0]+s.rec.ofen[1],R),fmt:v=>Math.round(v)+'%',meta:15,dir:1,metaTxt:'≥ 15%',sc:v=>clamp01(v/25),ok:R>0},
+    {k:'lossdef',l:'Perdas e p. errados na zona defensiva',v:pct(lossDef,L),fmt:v=>Math.round(v)+'%',meta:15,dir:-1,metaTxt:'≤ 15%',sc:v=>clamp01(1-v/30),ok:L>0},
+    {k:'shoton',l:'Remates enquadrados',v:pct(on,s.shots.t),fmt:v=>Math.round(v)+'%',meta:45,dir:1,metaTxt:'≥ 45%',sc:v=>clamp01(v/60),ok:s.shots.t>0},
+    {k:'atkshot',l:'Ataques que terminam em remate',v:pct(atkShot,s.atk.t),fmt:v=>Math.round(v)+'%',meta:35,dir:1,metaTxt:'≥ 35%',sc:v=>clamp01(v/50),ok:s.atk.t>0},
+    {k:'fc',l:'Faltas cometidas por jogo',v:s.fc.t/n,fmt:v=>v.toFixed(1).replace('.',','),meta:12,dir:-1,metaTxt:'≤ 12',sc:v=>clamp01(1-(v-6)/14),ok:m.events.length>0},
+    {k:'gd',l:'Diferença de golos por jogo',v:sc?(sc[0]-sc[1])/n:null,fmt:v=>(v>0?'+':'')+v.toFixed(1).replace('.',','),meta:0,dir:1,metaTxt:'≥ 0',sc:v=>clamp01((v+3)/6),ok:!!sc},
+  ].filter(x=>x.ok&&x.v!=null);
+}
+function kStatus(x){ const d=(x.v-x.meta)*x.dir, tol=Math.abs(x.meta)*0.2||1; return d>=0?'good':d>=-tol?'warn':'bad'; }
+const ST_L={good:'Cumpre',warn:'Perto',bad:'Abaixo'};
+function matchIndex(m){ const ks=kpis(m); if(!ks.length) return null; return Math.round(ks.reduce((a,x)=>a+x.sc(x.v),0)/ks.length*100)/10; }
+function selfAvg(m){ const r=m.self&&m.self.ratings; if(!r) return null; const v=Object.values(r).filter(x=>x>0); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+function idxChart(list){
+  const pts=list.map(m=>({m,v:matchIndex(m),c:selfAvg(m)})).filter(p=>p.v!=null);
+  if(pts.length<2) return '<p class="note">O gráfico de evolução aparece a partir de 2 jogos com acções registadas.</p>';
+  const W=1100,H=230,L=40,R=48,T=22,B=40, n=pts.length-1, X=i=>L+(n?i/n:0)*(W-L-R), Y=v=>T+(1-v/10)*(H-T-B);
+  let g=''; for(const v of [0,2.5,5,7.5,10]) g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${String(v).replace('.',',')}</text>`;
+  const path=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  const area=path+` L${X(n).toFixed(1)} ${Y(0)} L${X(0).toFixed(1)} ${Y(0)} Z`;
+  const cpts=pts.map((p,i)=>p.c!=null?[X(i),Y(p.c*2)]:null).filter(Boolean);
+  const cpath=cpts.map((q,i)=>(i?'L':'M')+q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' ');
+  const anc=i=>i===0?'start':i===n?'end':'middle';
+  const lbl=pts.map((p,i)=>`<text x="${X(i)}" y="${H-B+16}" text-anchor="${anc(i)}" font-size="10.5" fill="var(--muted)">${esc((p.m.date||'').slice(8,10)+'/'+(p.m.date||'').slice(5,7))}</text><text x="${X(i)}" y="${H-B+29}" text-anchor="${anc(i)}" font-size="10" fill="var(--muted)">${esc(short(p.m.opp).slice(0,10))}</text>`).join('');
+  return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:280px;height:auto" role="img" aria-label="Evolução da nota por jogo">${g}
+    <path d="${area}" fill="var(--red)" opacity=".08"/><path d="${path}" fill="none" stroke="var(--red)" stroke-width="2.4" stroke-linejoin="round"/>
+    ${cpts.length>1?`<path d="${cpath}" fill="none" stroke="var(--opp)" stroke-width="2" stroke-dasharray="5 4"/>`:''}
+    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.v)}" r="${i===n?5:3.5}" fill="var(--red)" stroke="var(--card)" stroke-width="1.5"><title>${esc(p.m.opp)}: ${String(p.v).replace('.',',')}</title></circle>`).join('')}
+    <text x="${X(n)}" y="${Y(pts[n].v)-12}" text-anchor="end" font-size="13" font-weight="700" fill="var(--ink)">${String(pts[n].v).replace('.',',')}</text>${lbl}</svg></div>
+    <div class="legend"><span><i style="background:var(--red)"></i>Nota objectiva (0–10)</span>${cpts.length>1?'<span><i style="background:var(--opp)"></i>Avaliação do treinador (×2)</span>':''}</div>`;
+}
+function vAuto(){
+  const list=seasonMatches().filter(m=>m.events.length);
+  if(!list.length) return `<div class="view"><div class="mhead"><div><h1>Autoanálise</h1><div class="meta">${esc(S.team.name)}</div></div><div class="sp">${scopeBarAuto()}</div></div><div class="card empty"><h2>Sem jogos registados neste período</h2><p class="muted">A autoanálise aparece quando houver jogos com acções registadas.</p></div></div>`;
+  const P=seasonPseudo(list), ks=kpis(P), idx=matchIndex(P);
+  const last=list[list.length-1], lk=Object.fromEntries(kpis(last).map(x=>[x.k,x]));
+  const ranked=ks.map(x=>({x,d:(x.v-x.meta)*x.dir/(Math.abs(x.meta)||5)})).sort((a,b)=>b.d-a.d);
+  const strong=ranked.filter(r=>r.d>=0).slice(0,2), weak=ranked.filter(r=>r.d<0).slice(-2).reverse();
+  if(!S.autoM||!list.find(m=>m.id===S.autoM)) S.autoM=(M()&&list.find(m=>m.id===S.cur))?S.cur:last.id;
+  const am=S.matches[S.autoM], ro=matchRO(am), sf=am.self||{ratings:{}};
+  const areaAvg=AREAS.map(([k,l])=>{ const v=list.map(m=>m.self&&m.self.ratings&&m.self.ratings[k]).filter(x=>x>0); return [k,l,v.length?v.reduce((a,b)=>a+b,0)/v.length:null,v.length]; });
+  const f1=v=>v.toFixed(1).replace('.',',');
+  const grade=v=>v>=7?'good':v>=5?'warn':'bad';
+  return `<div class="view">
+  <div class="mhead"><div><h1>Autoanálise</h1><div class="meta">${esc(S.team.name)} · Época ${seasonLabel(S.season)} · ${rangeLabel()} · ${list.length} jogo(s) avaliados</div></div><div class="sp">${scopeBarAuto()}</div></div>
+  <div class="g-map">
+    <section class="card"><h2>Metas da equipa<span class="sp"></span><span class="pill">Nota global ${idx!=null?f1(idx):'—'} / 10</span></h2>
+      <div class="tscroll"><table class="st"><thead><tr><th class="l">Indicador</th><th>Período</th><th>Meta</th><th>Estado</th><th>Último jogo</th></tr></thead><tbody>
+      ${ks.map(x=>{ const st=kStatus(x), l=lk[x.k]; const tr=l?((l.v-x.v)*x.dir>0.001?'▲':(l.v-x.v)*x.dir<-0.001?'▼':'='):''; return `<tr><td class="l"><b>${x.l}</b></td><td class="tot">${x.fmt(x.v)}</td><td class="muted">${x.metaTxt}</td><td><span class="pill st-${st}">${ST_L[st]}</span></td><td>${l?`${l.fmt(l.v)} <span style="color:${tr==='▲'?'var(--good)':tr==='▼'?'var(--bad)':'var(--muted)'}">${tr}</span>`:'—'}</td></tr>`; }).join('')}
+      </tbody></table></div>
+      <p class="note" style="margin:8px 0 0">"Último jogo" compara o jogo mais recente com a média do período (▲ melhor, ▼ pior). A nota de 0 a 10 é a média dos indicadores, cada um convertido numa escala de 0 a 1.</p></section>
+    <section class="view" style="gap:16px">
+      <div class="card"><h2>Pontos fortes</h2>${strong.length?strong.map(r=>`<div class="in good" style="margin-bottom:8px"><b>${r.x.l}</b><p>${r.x.fmt(r.x.v)} (meta ${r.x.metaTxt}). Manter o que está a funcionar e usar como referência no treino.</p></div>`).join(''):'<p class="note">Nenhum indicador cumpre ainda a meta neste período.</p>'}</div>
+      <div class="card"><h2>A melhorar</h2>${weak.length?weak.map(r=>`<div class="in bad" style="margin-bottom:8px"><b>${r.x.l}</b><p>${r.x.fmt(r.x.v)} (meta ${r.x.metaTxt}). Prioridade para o microciclo: exercícios específicos e objectivo claro para o próximo jogo.</p></div>`).join(''):'<p class="note">Todos os indicadores cumprem a meta. Subir a fasquia.</p>'}</div>
+    </section>
+  </div>
+  <section class="card"><h2>Evolução jogo a jogo</h2>${idxChart(list)}
+    <div class="tscroll" style="margin-top:10px"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Resultado</th><th>Nota</th><th>Saldo</th><th>Remates</th><th>Avaliação treinador</th><th></th></tr></thead><tbody>
+    ${[...list].reverse().map(m=>{ const v=matchIndex(m), s=stats(m), sl=s.rec.t-s.perda.t-s.pe.t, scr=score(m), ca=selfAvg(m); return `<tr ${m.id===S.autoM?'style="background:var(--soft)"':''}><td class="l">${esc(fmtDate(m.date))}</td><td class="l">${esc(m.home)} vs ${esc(m.opp)}</td><td>${scr?scr.join('–'):'—'}</td><td><span class="pill st-${v!=null?grade(v):''}">${v!=null?f1(v):'—'}</span></td><td>${sl>0?'+':''}${sl}</td><td>${s.shots.t}</td><td>${ca!=null?f1(ca)+' / 5':'<span class="muted">por fazer</span>'}</td><td><button class="btn sm ${m.id===S.autoM?'pri':''}" data-autom="${m.id}">${ca!=null?'Ver avaliação':'Avaliar'}</button></td></tr>`; }).join('')}
+    </tbody></table></div></section>
+  <div class="g2">
+    <section class="card"><h2>Avaliação do treinador · ${esc(am.home)} vs ${esc(am.opp)} · ${esc(fmtDate(am.date))}</h2>
+      <form id="selfForm" class="view" style="gap:12px">
+        ${AREAS.map(([k,l])=>`<div class="row" style="justify-content:space-between"><span style="font-weight:600">${l}</span><span class="seg">${[1,2,3,4,5].map(n=>`<button type="button" aria-pressed="${(sf.ratings||{})[k]===n}" data-rate="${k}" data-n="${n}" ${ro?'disabled':''}>${n}</button>`).join('')}</span></div>`).join('')}
+        <p class="note" style="margin:0">1 = muito fraco · 3 = razoável · 5 = excelente</p>
+        <label class="fl">O que correu bem<textarea class="inp" id="sf-bem" rows="2" ${ro?'disabled':''}>${esc(sf.bem||'')}</textarea></label>
+        <label class="fl">O que temos de melhorar<textarea class="inp" id="sf-mel" rows="2" ${ro?'disabled':''}>${esc(sf.melhorar||'')}</textarea></label>
+        <label class="fl">Objectivos para o próximo jogo<textarea class="inp" id="sf-obj" rows="2" ${ro?'disabled':''}>${esc(sf.objetivos||'')}</textarea></label>
+        ${ro?`<p class="note">${am.locked?'Jogo trancado: avaliação só de consulta.':'O seu perfil é só de leitura.'}</p>`:`<div class="row"><button class="btn pri" type="submit">Gravar avaliação</button>${sf.at?`<span class="note">Gravada em ${new Date(sf.at).toLocaleString('pt-PT')}${sf.by?' por '+esc(sf.by):''}</span>`:''}</div>`}
+      </form></section>
+    <section class="card"><h2>Média da avaliação do treinador no período</h2>
+      ${areaAvg.some(a=>a[2]!=null)?`<div class="bars">${areaAvg.map(([k,l,v,c])=>`<div class="bar" style="grid-template-columns:190px minmax(0,1fr) 54px"><span>${l}</span><span class="tr"><i style="width:${v!=null?v/5*100:0}%;background:${v==null?'var(--line)':v>=4?'var(--good)':v>=3?'var(--pe)':'var(--red)'}"></i></span><span class="v">${v!=null?f1(v):'—'}</span></div>`).join('')}</div>
+      <p class="note" style="margin:10px 0 0">Compare com as metas objectivas: se o treinador avalia bem uma área que os números mostram fraca, é um sinal para rever as imagens do jogo.</p>`:'<p class="note">Ainda não há avaliações do treinador neste período. Escolha um jogo na tabela acima e carregue em "Avaliar".</p>'}
+    </section>
+  </div></div>`;
+}
+function selfDraft(){ const g=id=>$(id)?$(id).value:undefined; const o={}; if(g('sf-bem')!==undefined){ o.bem=g('sf-bem'); o.melhorar=g('sf-mel'); o.objetivos=g('sf-obj'); } return o; }
+function scopeBarAuto(){
+  const ss=seasonsAvail();
+  return `<div class="row" style="gap:10px"><select class="inp" id="selSeason" style="width:auto" aria-label="Época">${ss.map(y=>`<option value="${y}" ${y===S.season?'selected':''}>Época ${seasonLabel(y)}</option>`).join('')||'<option>Sem jogos</option>'}</select>
+    <span class="seg">${[['all','Época'],['30d','30 dias'],['last5','Últimos 5']].map(([k,l])=>`<button aria-pressed="${S.range===k}" data-range="${k}">${l}</button>`).join('')}</span></div>`;
+}
+
+/* =========================================================
    RENDER
    ========================================================= */
-const VIEWS=[['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
+const VIEWS=[['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
 function view(){ const h=location.hash.slice(1); const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:(canEdit()?'registo':'analise'); }
 function render(){
   const app=$('app');
@@ -378,6 +472,7 @@ function render(){
   if(v==='plantel') app.innerHTML=vPlantel();
   else if(v==='analise'&&S.scope==='epoca') app.innerHTML=vAnaliseSeason();
   else if(v==='individual'&&S.scope==='epoca') app.innerHTML=vIndSeason();
+  else if(v==='auto') app.innerHTML=vAuto();
   else if(v==='jogos'||!m) app.innerHTML=vJogos();
   else if(v==='registo') app.innerHTML=vRegisto(m);
   else if(v==='analise') app.innerHTML=vAnalise(m);
@@ -778,6 +873,8 @@ document.addEventListener('click', async ev=>{
   else if(d.scope){ S.scope=d.scope; render(); }
   else if(d.range){ S.range=d.range; render(); }
   else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
+  else if(d.autom){ S.autoM=d.autom; render(); }
+  else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
   else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
   else if(d.sort){ S.sortI=S.sortI.k===d.sort?{k:d.sort,d:-S.sortI.d}:{k:d.sort,d:d.sort==='name'?1:-1}; render(); }
   else if(d.open){ S.cur=d.open; S.pending=null; if(t.tagName!=='A') location.hash='#'+(canEdit()?'registo':'analise'); render(); }
@@ -836,6 +933,7 @@ document.addEventListener('submit', async ev=>{
     if(g('nc-aemail')){ try{ const r=await call('create',{club_id:club.id,email:g('nc-aemail'),password:g('nc-apass'),full_name:g('nc-aname'),role:'admin'}); extra=r.created?` Admin: ${g('nc-aemail')} · palavra-passe ${g('nc-apass')}`:` ${g('nc-aemail')} adicionado como admin.`; }catch(e){ extra=' Falhou criar o admin: '+e.message; } }
     S.admin.loaded=false; say('admin','Clube criado: '+club.name+'.'+extra); return;
   }
+  if(f.id==='selfForm'){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; am.self=Object.assign({ratings:{}},am.self||{},selfDraft(),{at:Date.now(),by:S.profile.full_name||S.profile.email}); touch(am); toast('Avaliação gravada.'); render(); return; }
   if(f.id==='fName'){ const { error }=await sb.from('profiles').update({full_name:g('me-name')}).eq('user_id',S.session.user.id); if(error) say('conta',error.message,true); else { S.profile.full_name=g('me-name'); say('conta','Nome gravado.'); } return; }
   if(f.id==='fPass'){
     const btn=f.querySelector('button'); btn.disabled=true; btn.textContent='A gravar…';
