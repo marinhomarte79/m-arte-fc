@@ -128,10 +128,10 @@ function fromRow(r){
   const d=r.data||{};
   return { id:r.id, team_id:r.team_id, home:r.home, opp:r.opp, date:r.date, time:r.time, comp:r.comp, halfLen:r.half_len, status:r.status, locked:r.locked,
     clock:d.clock||{half:1,running:false,startedAt:null,base:0}, poss:d.poss||{cur:null,since:null,us:0,opp:0}, events:d.events||[],
-    scoreUnknown:!!d.scoreUnknown, note:d.note||'', ai:d.ai||null, self:d.self||null, updatedAt:Date.parse(r.updated_at)||0 };
+    scoreUnknown:!!d.scoreUnknown, note:d.note||'', ai:d.ai||null, self:d.self||null, lineup:d.lineup||null, updatedAt:Date.parse(r.updated_at)||0 };
 }
 function toRow(m){ return { home:m.home, opp:m.opp, date:m.date||null, time:m.time||'', comp:m.comp||'', half_len:m.halfLen, status:m.status,
-  data:{ clock:m.clock, poss:m.poss, events:m.events, scoreUnknown:m.scoreUnknown, note:m.note, ai:m.ai, self:m.self||null } }; }
+  data:{ clock:m.clock, poss:m.poss, events:m.events, scoreUnknown:m.scoreUnknown, note:m.note, ai:m.ai, self:m.self||null, lineup:m.lineup||null } }; }
 
 /* ---------- gravação com fila e reenvio ---------- */
 const timers={}, chains={}, dirty=new Set();
@@ -280,6 +280,76 @@ function indiv(m){
 }
 
 /* =========================================================
+   PONTUAÇÕES (0–10) E ONZE INICIAL
+   ========================================================= */
+const FORMS=['4-4-2','4-3-3','4-2-3-1','4-1-4-1','4-3-1-2','4-5-1','3-5-2','3-4-3','3-4-1-2','5-3-2','5-4-1'];
+const RW={rec:0.12,perda:-0.12,pe:-0.10,fc:-0.08,fs:0.05,golo:1.1,amarelo:-0.3,vermelho:-1.2,gr_dc:0.30,gr_di:0.10,gr_ca:0.20};
+function defaultLineup(m){
+  const posOrd={GR:0,DEF:1,MED:2,AV:3,'':2};
+  const cnt={}; for(const e of m.events) if(e.p) cnt[e.p]=(cnt[e.p]||0)+1;
+  const pls=players(); const gk=pls.find(p=>p.pos==='GR'&&cnt[p.id])||pls.find(p=>p.pos==='GR');
+  const rest=pls.filter(p=>p!==gk).sort((a,b)=>(cnt[b.id]||0)-(cnt[a.id]||0)).slice(0,10).sort((a,b)=>posOrd[a.pos||'']-posOrd[b.pos||'']);
+  return {formation:'4-4-2',slots:[gk?gk.id:null,...rest.map(p=>p.id)],override:{},auto:true};
+}
+const lineupOf = m => m.lineup || defaultLineup(m);
+function rateMatch(m){
+  const lu=lineupOf(m), part=new Set((lu.slots||[]).filter(Boolean)), subsIn=new Set(), subsOut=new Set(), acc={};
+  for(const e of m.events) if(e.type==='subst'){ if(e.p) subsOut.add(e.p); if(e.p2){ subsIn.add(e.p2); part.add(e.p2); } }
+  for(const e of m.events){ if(!e.p||e.type==='subst') continue; part.add(e.p); let w=RW[e.type]; if(e.type==='remate') w=e.sub==='baliza'?0.18:0.05; if(w==null) continue; acc[e.p]=(acc[e.p]||0)+w; }
+  const gk=(lu.slots||[])[0], ga=count(m.events,e=>e.type==='golo_adv'), out={};
+  for(const id of part){ let r=6.0+(acc[id]||0); if(id===gk) r-=0.35*ga;
+    const ov=lu.override&&lu.override[id]; const man=ov!=null&&ov!==''&&!isNaN(+ov);
+    out[id]={r:man?Math.max(0,Math.min(10,+ov)):Math.round(Math.max(3,Math.min(10,r))*10)/10, manual:man, inn:subsIn.has(id), out:subsOut.has(id)}; }
+  return out;
+}
+const rtCls = r => r>=9?'r6':r>=8?'r5':r>=7?'r4':r>=6.5?'r3':r>=6?'r2':'r1';
+const f1r = v => (Math.round(v*10)/10).toFixed(1);
+function vRatings(m){
+  const lu=lineupOf(m), rt=rateMatch(m), lines=lu.formation.split('-').map(Number), slots=lu.slots||[];
+  const vals=Object.values(rt).map(x=>x.r), avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  const rows=[[0,1],...lines.map((n,li)=>[n,li])]; let idx=0; const marks=[];
+  const L=lines.length;
+  marks.push({i:0,x:50,y:7});
+  idx=1; lines.forEach((n,li)=>{ const y=25+li*(56/Math.max(1,L-1)); for(let k=0;k<n;k++){ marks.push({i:idx,x:(k+1)/(n+1)*100,y:L===1?50:y}); idx++; } });
+  const pl=id=>S.players.find(p=>p.id===id);
+  const chip=(id,x,y)=>{ const p=pl(id), r=rt[id]; const nm=p?p.name:'—', num=p&&p.num?p.num:'';
+    return `<div class="lp" style="left:${x}%;top:${y}%">${r&&(r.out||r.inn)?`<span class="lp-sub" title="${r.out?'Substituído':'Entrou'}">${r.out?'↓':'↑'}</span>`:''}<span class="lp-shirt">${esc(num||initials(nm))}</span>${r?`<span class="rt ${rtCls(r.r)}" ${r.manual?'title="Nota manual"':''}>${f1r(r.r)}${r.manual?'*':''}</span>`:''}<span class="lp-name">${num?`<b>${esc(num)}</b> `:''}${esc(nm)}</span></div>`; };
+  const onField=marks.map(mk=>slots[mk.i]?chip(slots[mk.i],mk.x,mk.y):`<div class="lp empty" style="left:${mk.x}%;top:${mk.y}%"><span class="lp-shirt">+</span></div>`).join('');
+  const onSet=new Set(slots.filter(Boolean));
+  const others=Object.entries(rt).filter(([id])=>!onSet.has(id)).sort((a,b)=>b[1].r-a[1].r);
+  const ed=canEdit()&&!matchRO(m);
+  const allPl=players();
+  const rankList=Object.entries(rt).sort((a,b)=>b[1].r-a[1].r);
+  const best=rankList[0];
+  return `<section class="card"><h2>Pontuações do jogo<span class="sp"></span>${avg!=null?`<span class="row small" style="gap:6px">Média da equipa <span class="rt ${rtCls(avg)}">${f1r(avg)}</span></span>`:''}</h2>
+  <div class="g-map" style="align-items:start">
+    <div><div class="lineup">${pitchVertical()}<div class="lu-form">${esc(lu.formation)}</div>${onField}</div>
+      ${lu.auto?`<p class="note" style="margin:8px 0 0">Onze sugerido automaticamente (guarda-redes + 10 jogadores com mais acções, em 4-4-2). ${ed?'Ajuste em "Editar onze e formação".':''}</p>`:''}</div>
+    <div class="view" style="gap:12px">
+      ${best?`<div class="in good"><span class="tag">Melhor em campo</span><b>${esc((pl(best[0])||{}).name||'?')} · ${f1r(best[1].r)}</b></div>`:''}
+      ${others.length?`<div><div class="sec-h" style="margin-bottom:6px">Suplentes utilizados e outros</div>${others.map(([id,r])=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span>${r.inn?'<span class="lp-sub sm">↑</span> ':''}${esc((pl(id)||{}).name||'?')}</span><span class="rt ${rtCls(r.r)}">${f1r(r.r)}${r.manual?'*':''}</span></div>`).join('')}</div>`:''}
+      <div class="legend" style="margin:0">${[['r1','< 6,0'],['r2','6,0–6,4'],['r3','6,5–6,9'],['r4','7,0–7,9'],['r5','8,0–8,9'],['r6','9,0+']].map(([c,l])=>`<span><span class="rt ${c}" style="min-width:0;padding:0 6px">&nbsp;</span>${l}</span>`).join('')}</div>
+      <p class="note" style="margin:0">Nota automática: parte de 6,0 e soma por cada acção (recuperação +0,12 · perda −0,12 · passe errado −0,10 · falta cometida −0,08 · falta sofrida +0,05 · remate à baliza +0,18 · golo +1,1 · amarelo −0,3 · vermelho −1,2; guarda-redes: defesa +0,1 a +0,3, golo sofrido −0,35). * = nota acertada pelo treinador.</p>
+    </div>
+  </div>
+  ${ed?`<details class="lu-ed"${S.luOpen?' open':''}><summary>Editar onze e formação</summary>
+    <div class="formrow" style="margin:10px 0"><label class="fl">Formação<select class="inp" data-luform>${FORMS.map(f=>`<option ${f===lu.formation?'selected':''}>${f}</option>`).join('')}</select></label></div>
+    <div class="formrow">${marks.map((mk,k)=>{ let lab='GR'; if(k>0){ let c=0,li=0; for(;li<lines.length;li++){ if(k-1<c+lines[li]) break; c+=lines[li]; } lab=(li===0?'Defesa':li===lines.length-1?'Ataque':(lines.length>3?(li===1?'Meio-campo recuado':'Meio-campo ofensivo'):'Meio-campo'))+' '+(k-c); } return `<label class="fl">${lab}<select class="inp" data-luslot="${k}"><option value="">—</option>${allPl.map(p=>`<option value="${p.id}" ${slots[k]===p.id?'selected':''}>${esc((p.num?p.num+' · ':'')+p.name)}</option>`).join('')}</select></label>`; }).join('')}</div>
+    <div class="sec-h" style="margin-top:14px">Acertar notas à mão (opcional)</div>
+    <div class="formrow">${Object.entries(rt).map(([id,r])=>`<label class="fl">${esc((pl(id)||{}).name||'?')} <span class="muted">(auto ${f1r(rateFor(m,id))})</span><input class="inp" type="number" min="0" max="10" step="0.1" data-luov="${id}" value="${r.manual?r.r:''}" placeholder="${f1r(rateFor(m,id))}"></label>`).join('')}</div>
+    <p class="note">Deixe em branco para usar a nota automática.</p>
+  </details>`:''}
+  </section>`;
+}
+function rateFor(m,id){ const lu=lineupOf(m), o=lu.override; lu.override={}; const r=rateMatch(m)[id]; lu.override=o; return r?r.r:6; }
+const initials = n => String(n||'').split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+function pitchVertical(){
+  return `<svg class="lu-bg" viewBox="0 0 68 90" preserveAspectRatio="none" aria-hidden="true"><rect width="68" height="90" class="pg1"/>${Array.from({length:9},(_,i)=>`<rect x="0" y="${i*10}" width="68" height="5" class="pg2"/>`).join('')}
+  <g class="pl"><rect x="1" y="1" width="66" height="88"/><line x1="1" y1="45" x2="67" y2="45"/><circle cx="34" cy="45" r="7"/><rect x="15" y="1" width="38" height="14"/><rect x="25" y="1" width="18" height="5"/><rect x="15" y="75" width="38" height="14"/><rect x="25" y="84" width="18" height="5"/></g></svg>`;
+}
+function luChange(m){ if(!m.lineup){ const d=defaultLineup(m); m.lineup={formation:d.formation,slots:d.slots,override:{}}; } delete m.lineup.auto; return m.lineup; }
+
+/* =========================================================
    ÉPOCA (1 de Julho a 30 de Junho)
    ========================================================= */
 function seasonOf(d){ if(!d) return null; const [y,mo]=String(d).split('-').map(Number); return mo>=7?y:y-1; }
@@ -311,15 +381,16 @@ function scopeBar(){
 }
 function seasonPlayers(list){
   const acc={};
-  for(const p of players()) acc[p.id]={id:p.id,name:p.name,num:p.num,gk:p.pos==='GR',jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[]};
+  for(const p of players()) acc[p.id]={id:p.id,name:p.name,num:p.num,gk:p.pos==='GR',jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[],rs:0,rn:0};
   for(const m of list){
-    const rows=Object.fromEntries(indiv(m).map(r=>[r.id,r]));
+    const rows=Object.fromEntries(indiv(m).map(r=>[r.id,r])), rts=rateMatch(m);
     for(const id of new Set([...Object.keys(acc),...Object.keys(rows)])){
-      const r=rows[id]; const a=acc[id]||(acc[id]={id,name:r?r.name:'?',num:'',gk:false,jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[]});
+      const r=rows[id]; const a=acc[id]||(acc[id]={id,name:r?r.name:'?',num:'',gk:false,jogos:0,rec:0,perda:0,pe:0,fc:0,fs:0,shot:0,golos:0,saldo:0,series:[],rs:0,rn:0});
+      if(rts[id]){ a.rs+=rts[id].r; a.rn++; }
       if(r && r.act>0){ a.jogos++; for(const k of ['rec','perda','pe','fc','fs','shot','golos','saldo']) a[k]+=r[k]; a.series.push(r.saldo); } else a.series.push(null);
     }
   }
-  for(const a of Object.values(acc)){ const j=a.jogos||1; a.rec_j=a.rec/j; a.perda_j=a.perda/j; a.pe_j=a.pe/j; a.saldo_j=a.jogos?a.saldo/j:0; }
+  for(const a of Object.values(acc)){ const j=a.jogos||1; a.rec_j=a.rec/j; a.perda_j=a.perda/j; a.pe_j=a.pe/j; a.saldo_j=a.jogos?a.saldo/j:0; a.nota=a.rn?a.rs/a.rn:0; }
   return Object.values(acc);
 }
 function spark(series){
@@ -342,13 +413,13 @@ function vIndSeason(){
   <div class="mhead"><div><h1>Época ${seasonLabel(S.season)}</h1><div class="meta">${esc(S.team.name)} · ${list.length} jogo(s) · ${rangeLabel()} · de ${esc(fmtDate(list[0].date))} a ${esc(fmtDate(list[list.length-1].date))}</div></div>
     <div class="sp row">${scopeBar()}<button class="btn" data-exp="epoca">Exportar época (CSV)</button></div></div>
   <section class="card"><div class="tscroll"><table class="st">
-    <thead><tr><th></th><th></th><th colspan="2" class="band">Recuperações</th><th colspan="2">Perdas</th><th colspan="2" class="band">Passes errados</th><th>Faltas</th><th>Faltas</th><th></th><th></th><th colspan="2" class="band">Saldo de bola</th><th></th></tr>
-    <tr>${th('name','Jogador')}${th('jogos','Jogos')}${th('rec','Total','band')}${th('rec_j','/jogo','band')}${th('perda','Total')}${th('perda_j','/jogo')}${th('pe','Total','band')}${th('pe_j','/jogo','band')}${th('fc','Com.')}${th('fs','Sofr.')}${th('shot','Remates')}${th('golos','Golos')}${th('saldo','Total','band')}${th('saldo_j','/jogo','band')}<th>Evolução</th></tr></thead>
+    <thead><tr><th></th><th></th><th colspan="2" class="band">Recuperações</th><th colspan="2">Perdas</th><th colspan="2" class="band">Passes errados</th><th>Faltas</th><th>Faltas</th><th></th><th></th><th colspan="2" class="band">Saldo de bola</th><th></th><th></th></tr>
+    <tr>${th('name','Jogador')}${th('jogos','Jogos')}${th('rec','Total','band')}${th('rec_j','/jogo','band')}${th('perda','Total')}${th('perda_j','/jogo')}${th('pe','Total','band')}${th('pe_j','/jogo','band')}${th('fc','Com.')}${th('fs','Sofr.')}${th('shot','Remates')}${th('golos','Golos')}${th('saldo','Total','band')}${th('saldo_j','/jogo','band')}<th>Evolução</th>${th('nota','Nota média')}</tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}${r.gk?' <span class="role">GR</span>':''}</td><td>${r.jogos}</td>
       <td class="band">${heat(r.rec,mx.rec,'var(--good)')}</td><td class="band">${f1(r.rec_j)}</td><td>${heat(r.perda,mx.perda,'var(--red)')}</td><td>${f1(r.perda_j)}</td><td class="band">${heat(r.pe,mx.pe,'var(--pe)')}</td><td class="band">${f1(r.pe_j)}</td>
       <td>${r.fc}</td><td>${r.fs}</td><td>${r.shot}</td><td>${r.golos||''}</td>
-      <td class="band"><b style="color:${sc(r.saldo)}">${sg(r.saldo)}</b></td><td class="band" style="color:${sc(r.saldo_j)}">${r.saldo_j>0?'+':''}${f1(r.saldo_j)}</td><td>${spark(r.series)}</td></tr>`).join('')}
-    <tr><td><b>TOTAL EQUIPA</b></td><td>${list.length}</td><td class="tot band">${tot('rec')}</td><td class="band">${f1(tot('rec')/list.length)}</td><td class="tot">${tot('perda')}</td><td>${f1(tot('perda')/list.length)}</td><td class="tot band">${tot('pe')}</td><td class="band">${f1(tot('pe')/list.length)}</td><td class="tot">${tot('fc')}</td><td class="tot">${tot('fs')}</td><td class="tot">${tot('shot')}</td><td class="tot">${tot('golos')}</td><td class="tot band">${sg(tot('saldo'))}</td><td class="band">${f1(tot('saldo')/list.length)}</td><td></td></tr>
+      <td class="band"><b style="color:${sc(r.saldo)}">${sg(r.saldo)}</b></td><td class="band" style="color:${sc(r.saldo_j)}">${r.saldo_j>0?'+':''}${f1(r.saldo_j)}</td><td>${spark(r.series)}</td><td>${r.rn?`<span class="rt ${rtCls(r.nota)}">${f1r(r.nota)}</span>`:'—'}</td></tr>`).join('')}
+    <tr><td><b>TOTAL EQUIPA</b></td><td>${list.length}</td><td class="tot band">${tot('rec')}</td><td class="band">${f1(tot('rec')/list.length)}</td><td class="tot">${tot('perda')}</td><td>${f1(tot('perda')/list.length)}</td><td class="tot band">${tot('pe')}</td><td class="band">${f1(tot('pe')/list.length)}</td><td class="tot">${tot('fc')}</td><td class="tot">${tot('fs')}</td><td class="tot">${tot('shot')}</td><td class="tot">${tot('golos')}</td><td class="tot band">${sg(tot('saldo'))}</td><td class="band">${f1(tot('saldo')/list.length)}</td><td></td><td></td></tr>
     </tbody></table></div>
     <p class="note" style="margin:8px 0 0">"Jogos" conta os jogos em que o jogador tem pelo menos uma acção registada. Médias /jogo calculadas sobre esses jogos. Evolução = saldo de bola jogo a jogo (recuperações − perdas − passes errados), o ponto final é o jogo mais recente.</p></section>
   <section class="card"><h2>Jogos incluídos</h2><div class="tscroll"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Acções</th><th>Rec.</th><th>Perdas</th><th>P. err.</th><th>Saldo</th><th></th></tr></thead><tbody>
@@ -632,6 +703,7 @@ function vIndividual(m){
   const tot=c=>rows.reduce((a,r)=>a+r[c],0), gk=indiv(m).filter(r=>r.gk);
   const gkRows=gk.map(r=>{ const g=t=>[1,2].map(h=>count(m.events,e=>e.type===t&&e.p===r.id&&e.half===h)); return `<tr><td><b>${esc(r.name)}</b></td>${[g('gr_dc'),g('gr_di'),g('gr_ca'),g('pe'),g('fs')].map((a,i)=>`<td class="${i%2?'':'band'}">${a[0]}</td><td class="${i%2?'':'band'}">${a[1]}</td>`).join('')}</tr>`; }).join('');
   return `<div class="view"><div class="mhead"><div><h1>Análise individual</h1><div class="meta">${esc(m.home)} vs ${esc(m.opp)} · ${esc(fmtDate(m.date))} · clique num cabeçalho para ordenar</div></div><div class="sp row">${scopeBar()}<button class="btn" data-exp="individual">Exportar (CSV)</button></div></div>
+  ${vRatings(m)}
   <section class="card"><div class="tscroll"><table class="st"><thead><tr><th></th>${cols.map(([c,l],i)=>`<th colspan="3" class="${i%2?'':'band'}">${l}</th>`).join('')}<th></th><th></th></tr>
     <tr>${th('name','Jogador')}${cols.map(([c],i)=>`<th class="${i%2?'':'band'}">1ª</th><th class="${i%2?'':'band'}">2ª</th>${th(c,'T',i%2?'':'band')}`).join('')}${th('golos','Golos')}${th('saldo','Saldo')}</tr></thead>
     <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}</td>${cols.map(([c,,col],i)=>`<td class="${i%2?'':'band'}">${heat(r[c+'1'],mx[c],col)}</td><td class="${i%2?'':'band'}">${heat(r[c+'2'],mx[c],col)}</td><td class="${i%2?'':'band'}"><b>${r[c]}</b></td>`).join('')}<td>${r.golos||''}</td><td><b style="color:${r.saldo>0?'var(--good)':r.saldo<0?'var(--bad)':'var(--muted)'}">${r.saldo>0?'+':''}${r.saldo}</b></td></tr>`).join('')}
@@ -807,9 +879,9 @@ function csv(rows){ return '﻿'+rows.map(r=>r.map(v=>{ v=String(v??''); return 
 const slug = m => (m.season?(m.home+'-epoca-'+seasonLabel(S.season)):(m.home+'-vs-'+m.opp+'-'+(m.date||''))).replace(/[\s/]+/g,'-').replace(/[^\w\-]/g,'');
 async function exp(kind){
   const m=curAnalysis();
-  if(kind==='epoca'){ const list=seasonMatches(), r=[['Jogador','Jogos','Recuperações','Rec/jogo','Perdas','Perdas/jogo','Passes errados','P.err/jogo','Faltas com.','Faltas sofr.','Remates','Golos','Saldo','Saldo/jogo']];
+  if(kind==='epoca'){ const list=seasonMatches(), r=[['Jogador','Jogos','Recuperações','Rec/jogo','Perdas','Perdas/jogo','Passes errados','P.err/jogo','Faltas com.','Faltas sofr.','Remates','Golos','Saldo','Saldo/jogo','Nota média']];
     const f=v=>v.toFixed(2).replace('.',',');
-    for(const x of seasonPlayers(list)) r.push([x.name,x.jogos,x.rec,f(x.rec_j),x.perda,f(x.perda_j),x.pe,f(x.pe_j),x.fc,x.fs,x.shot,x.golos,x.saldo,f(x.saldo_j)]);
+    for(const x of seasonPlayers(list)) r.push([x.name,x.jogos,x.rec,f(x.rec_j),x.perda,f(x.perda_j),x.pe,f(x.pe_j),x.fc,x.fs,x.shot,x.golos,x.saldo,f(x.saldo_j),x.rn?f(x.nota):'']);
     return download('epoca-'+seasonLabel(S.season).replace('/','-')+'-'+(S.team.name||'').replace(/\s+/g,'-')+'.csv',csv(r),'text/csv'); }
   if(kind==='backup'){
     const [{data:clubs},{data:teams},{data:pls},{data:mts}] = await Promise.all([sb.from('clubs').select('*'),sb.from('teams').select('*'),sb.from('players').select('*'),sb.from('matches').select('*')]);
@@ -826,8 +898,8 @@ async function exp(kind){
     r.push(['Consequência ataques',...ATQ_CONS.map(([k,l])=>l+': '+s.atk.cons[k][0]+'+'+s.atk.cons[k][1])]);
     r.push(['Posse',s.poss!=null?s.poss+'%':'não registada']);
     return download('estatistica-'+slug(m)+'.csv',csv(r),'text/csv'); }
-  if(kind==='individual'){ const r=[['Jogador','Rec 1ª','Rec 2ª','Perdas 1ª','Perdas 2ª','F.Com 1ª','F.Com 2ª','F.Sof 1ª','F.Sof 2ª','Remates 1ª','Remates 2ª','P.Err 1ª','P.Err 2ª','Golos','Saldo']];
-    for(const x of indiv(m)) r.push([x.name,x.rec1,x.rec2,x.perda1,x.perda2,x.fc1,x.fc2,x.fs1,x.fs2,x.shot1,x.shot2,x.pe1,x.pe2,x.golos,x.saldo]);
+  if(kind==='individual'){ const r=[['Jogador','Rec 1ª','Rec 2ª','Perdas 1ª','Perdas 2ª','F.Com 1ª','F.Com 2ª','F.Sof 1ª','F.Sof 2ª','Remates 1ª','Remates 2ª','P.Err 1ª','P.Err 2ª','Golos','Saldo','Nota']]; const rts=rateMatch(m);
+    for(const x of indiv(m)) r.push([x.name,x.rec1,x.rec2,x.perda1,x.perda2,x.fc1,x.fc2,x.fs1,x.fs2,x.shot1,x.shot2,x.pe1,x.pe2,x.golos,x.saldo,rts[x.id]?String(rts[x.id].r).replace('.',','):'']);
     return download('individual-'+slug(m)+'.csv',csv(r),'text/csv'); }
 }
 
@@ -950,6 +1022,11 @@ document.addEventListener('change', async ev=>{
   const el=ev.target, d=el.dataset;
   if(el.id==='selClub'){ await selectClub(el.value); return; }
   if(el.id==='selTeam'){ selectTeam(el.value); return; }
+  if(d.luform!==undefined||d.luslot!==undefined||d.luov!==undefined){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); S.luOpen=true;
+    if(d.luform!==undefined){ const old=lu.slots; const n=1+el.value.split('-').reduce((a,b)=>a+ +b,0); lu.formation=el.value; lu.slots=Array.from({length:n},(_,i)=>old[i]||null); }
+    else if(d.luslot!==undefined){ const k=+d.luslot, v=el.value||null; const j=lu.slots.indexOf(v); if(v&&j>=0&&j!==k) lu.slots[j]=lu.slots[k]||null; lu.slots[k]=v; }
+    else { lu.override=lu.override||{}; if(el.value==='') delete lu.override[d.luov]; else lu.override[d.luov]=Math.max(0,Math.min(10,+el.value)); }
+    touch(m); render(); return; }
   if(el.id==='selSeason'){ S.season=+el.value; render(); return; }
   if(d.pf){ const p=S.players.find(x=>x.id===d.id); if(!p) return; p[d.pf]=el.value.trim(); const { error }=await sb.from('players').update({[d.pf]:p[d.pf]}).eq('id',p.id); if(error) toast(error.message); else toast('Plantel gravado.'); return; }
   if(d.tf){ const t=S.teams.find(x=>x.id===d.id); const v=d.tf==='half_len'?+el.value:el.value.trim(); const { error }=await sb.from('teams').update({[d.tf]:v}).eq('id',t.id); if(error) toast(error.message); else { t[d.tf]=v; renderHeader(); toast('Equipa gravada.'); } return; }

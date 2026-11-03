@@ -234,3 +234,20 @@ table.st td input.inp,table.st td select.inp{padding:5px 7px;font-size:13px;min-
 .pill.st-bad{background:color-mix(in srgb,var(--bad) 16%,var(--card));color:var(--bad)}
 .seg button:disabled{opacity:.5;cursor:not-allowed}
 textarea.inp{resize:vertical;font:inherit}
+
+/* ---------- Pontuações / onze ---------- */
+.lineup{position:relative;width:100%;max-width:560px;aspect-ratio:68/90;border-radius:8px;overflow:hidden;margin:0 auto}
+.lu-bg{position:absolute;inset:0;width:100%;height:100%}
+.lu-form{position:absolute;right:8px;top:6px;font-family:var(--f-disp);font-weight:700;font-size:15px;color:#fff;background:rgba(0,0,0,.35);padding:2px 8px;border-radius:6px;letter-spacing:.06em}
+.lp{position:absolute;transform:translate(-50%,-30%);display:flex;flex-direction:column;align-items:center;width:23%;min-width:64px}
+.lp-shirt{width:clamp(30px,8vw,46px);height:clamp(30px,8vw,46px);border-radius:50%;background:var(--red);color:var(--on-red);display:grid;place-items:center;font-family:var(--f-disp);font-weight:800;font-size:clamp(13px,3.2vw,18px);border:2px solid rgba(255,255,255,.85);box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.lp.empty .lp-shirt{background:rgba(255,255,255,.15);border-style:dashed;color:#fff}
+.lp .rt{position:absolute;top:-4px;left:calc(50% + clamp(10px,3vw,18px))}
+.lp-name{margin-top:4px;background:rgba(10,16,13,.82);color:#fff;font-size:clamp(10px,2.4vw,13px);font-weight:600;padding:2px 7px;border-radius:5px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.lp-name b{font-weight:800;opacity:.85}
+.lp-sub{position:absolute;top:-2px;right:calc(50% + clamp(12px,3.4vw,22px));width:18px;height:18px;border-radius:50%;background:#fff;color:#1a7f3c;font-size:12px;font-weight:800;display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.lp-sub.sm{position:static;display:inline-grid;width:16px;height:16px;font-size:11px;vertical-align:-2px}
+.rt{display:inline-block;min-width:34px;text-align:center;padding:1px 5px;border-radius:5px;font-weight:800;font-size:13px;color:#fff;font-variant-numeric:tabular-nums;line-height:1.35}
+.rt.r1{background:#D0342C}.rt.r2{background:#E8711A}.rt.r3{background:#E9A10F}.rt.r4{background:#5AA02C}.rt.r5{background:#1E8449}.rt.r6{background:#2566C7}
+.lu-ed{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.lu-ed summary{cursor:pointer;font-weight:700}
