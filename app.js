@@ -282,7 +282,8 @@ function indiv(m){
 /* =========================================================
    PONTUAÇÕES (0–10) E ONZE INICIAL
    ========================================================= */
-const FORMS=['4-4-2','4-3-3','4-2-3-1','4-1-4-1','4-3-1-2','4-5-1','3-5-2','3-4-3','3-4-1-2','5-3-2','5-4-1'];
+const FORMS=['4-4-2','4-3-3','4-2-3-1','4-1-4-1','4-3-1-2','4-5-1','3-5-2','3-4-3','3-4-1-2','5-3-2','5-4-1','3-3-2','3-2-3','3-3-1','2-3-2','2-3-1','3-2-1','2-1-2','2-2'];
+const formSize = f => 1+f.split('-').reduce((a,b)=>a+ +b,0);
 const RW={rec:0.12,perda:-0.12,pe:-0.10,fc:-0.08,fs:0.05,golo:1.1,amarelo:-0.3,vermelho:-1.2,gr_dc:0.30,gr_di:0.10,gr_ca:0.20};
 function defaultLineup(m){
   const posOrd={GR:0,DEF:1,MED:2,AV:3,'':2};
@@ -327,6 +328,7 @@ function vRatings(m){
       ${lu.auto?`<p class="note" style="margin:8px 0 0">Onze sugerido automaticamente (guarda-redes + 10 jogadores com mais acções, em 4-4-2). ${ed?'Ajuste em "Editar onze e formação".':''}</p>`:''}</div>
     <div class="view" style="gap:12px">
       ${best?`<div class="in good"><span class="tag">Melhor em campo</span><b>${esc((pl(best[0])||{}).name||'?')} · ${f1r(best[1].r)}</b></div>`:''}
+      ${(()=>{ const fs=fieldState(m); if(!fs) return ''; const un=[...fs.bench].filter(id=>!rt[id]); return un.length?`<div><div class="sec-h" style="margin-bottom:6px">Banco (não utilizados)</div><div class="chips">${un.map(id=>`<span class="pill">${esc((pl(id)||{}).name||'?')}</span>`).join('')}</div></div>`:''; })()}
       ${others.length?`<div><div class="sec-h" style="margin-bottom:6px">Suplentes utilizados e outros</div>${others.map(([id,r])=>`<div class="row" style="justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)"><span>${r.inn?'<span class="lp-sub sm">↑</span> ':''}${esc((pl(id)||{}).name||'?')}</span><span class="rt ${rtCls(r.r)}">${f1r(r.r)}${r.manual?'*':''}</span></div>`).join('')}</div>`:''}
       <div class="legend" style="margin:0">${[['r1','< 6,0'],['r2','6,0–6,4'],['r3','6,5–6,9'],['r4','7,0–7,9'],['r5','8,0–8,9'],['r6','9,0+']].map(([c,l])=>`<span><span class="rt ${c}" style="min-width:0;padding:0 6px">&nbsp;</span>${l}</span>`).join('')}</div>
       <p class="note" style="margin:0">Nota automática: parte de 6,0 e soma por cada acção (recuperação +0,12 · perda −0,12 · passe errado −0,10 · falta cometida −0,08 · falta sofrida +0,05 · remate à baliza +0,18 · golo +1,1 · amarelo −0,3 · vermelho −1,2; guarda-redes: defesa +0,1 a +0,3, golo sofrido −0,35). * = nota acertada pelo treinador.</p>
@@ -335,6 +337,8 @@ function vRatings(m){
   ${ed?`<details class="lu-ed"${S.luOpen?' open':''}><summary>Editar onze e formação</summary>
     <div class="formrow" style="margin:10px 0"><label class="fl">Formação<select class="inp" data-luform>${FORMS.map(f=>`<option ${f===lu.formation?'selected':''}>${f}</option>`).join('')}</select></label></div>
     <div class="formrow">${marks.map((mk,k)=>{ let lab='GR'; if(k>0){ let c=0,li=0; for(;li<lines.length;li++){ if(k-1<c+lines[li]) break; c+=lines[li]; } lab=(li===0?'Defesa':li===lines.length-1?'Ataque':(lines.length>3?(li===1?'Meio-campo recuado':'Meio-campo ofensivo'):'Meio-campo'))+' '+(k-c); } return `<label class="fl">${lab}<select class="inp" data-luslot="${k}"><option value="">—</option>${allPl.map(p=>`<option value="${p.id}" ${slots[k]===p.id?'selected':''}>${esc((p.num?p.num+' · ':'')+p.name)}</option>`).join('')}</select></label>`; }).join('')}</div>
+    <div class="sec-h" style="margin-top:14px">Banco de suplentes</div>
+    <div class="chips">${allPl.filter(p=>!slots.includes(p.id)).map(p=>{ const on=(lu.bench||[]).includes(p.id); return `<button type="button" class="chip ${on?'':'skip'}" data-lubench="${p.id}" aria-pressed="${on}">${on?'✓ ':''}${esc(p.name)}</button>`; }).join('')}</div>
     <div class="sec-h" style="margin-top:14px">Acertar notas à mão (opcional)</div>
     <div class="formrow">${Object.entries(rt).map(([id,r])=>`<label class="fl">${esc((pl(id)||{}).name||'?')} <span class="muted">(auto ${f1r(rateFor(m,id))})</span><input class="inp" type="number" min="0" max="10" step="0.1" data-luov="${id}" value="${r.manual?r.r:''}" placeholder="${f1r(rateFor(m,id))}"></label>`).join('')}</div>
     <p class="note">Deixe em branco para usar a nota automática.</p>
@@ -346,6 +350,21 @@ const initials = n => String(n||'').split(/\s+/).map(w=>w[0]||'').join('').slice
 function pitchVertical(){
   return `<svg class="lu-bg" viewBox="0 0 68 90" preserveAspectRatio="none" aria-hidden="true"><rect width="68" height="90" class="pg1"/>${Array.from({length:9},(_,i)=>`<rect x="0" y="${i*10}" width="68" height="5" class="pg2"/>`).join('')}
   <g class="pl"><rect x="1" y="1" width="66" height="88"/><line x1="1" y1="45" x2="67" y2="45"/><circle cx="34" cy="45" r="7"/><rect x="15" y="1" width="38" height="14"/><rect x="25" y="1" width="18" height="5"/><rect x="15" y="75" width="38" height="14"/><rect x="25" y="84" width="18" height="5"/></g></svg>`;
+}
+function fieldState(m){
+  if(!m.lineup) return null;
+  const on=new Set((m.lineup.slots||[]).filter(Boolean)), bench=new Set((m.lineup.bench||[]).filter(id=>!on.has(id)));
+  for(const e of m.events) if(e.type==='subst'){ if(e.p){ on.delete(e.p); } if(e.p2){ on.add(e.p2); bench.delete(e.p2); } }
+  return {on,bench};
+}
+function buildLineup(callup, formation){
+  const posOrd={GR:0,DEF:1,MED:2,AV:3,'':2}, pl=id=>S.players.find(p=>p.id===id)||{};
+  const tit=Object.keys(callup).filter(id=>callup[id]==='T'), ben=Object.keys(callup).filter(id=>callup[id]==='B');
+  const gk=tit.find(id=>pl(id).pos==='GR')||tit[0]||null;
+  const rest=tit.filter(id=>id!==gk).sort((a,b)=>posOrd[pl(a).pos||'']-posOrd[pl(b).pos||'']||(+pl(a).num||99)-(+pl(b).num||99));
+  const n=formSize(formation), slots=[gk,...rest].slice(0,n); while(slots.length<n) slots.push(null);
+  const extra=[gk,...rest].slice(n).filter(Boolean);
+  return {formation,slots,bench:[...ben,...extra],override:{}};
 }
 function luChange(m){ if(!m.lineup){ const d=defaultLineup(m); m.lineup={formation:d.formation,slots:d.slots,override:{}}; } delete m.lineup.auto; return m.lineup; }
 
@@ -591,7 +610,15 @@ function vRegisto(m){
     if(st==='loc'){ prompt='Toque no campo onde aconteceu'; body=`<div class="chips"><button class="chip skip" data-skiploc>Sem localização</button></div>`; }
     else if(st==='player'||st==='player2'){ prompt=pd.type==='subst'?(st==='player'?'Quem sai?':'Quem entra?'):'Que jogador?';
       const pls=players().filter(x=>x.active!==false).sort((x,y)=>(y.pos==='GR'?1:0)-(x.pos==='GR'?1:0)||(+x.num||99)-(+y.num||99));
-      body=`<div class="chips">${pls.map(pl=>`<button class="chip ${pl.pos==='GR'?'gk':''}" data-pl="${pl.id}"><span class="n">${esc(pl.num||'')}</span>${esc(pl.name)}</button>`).join('')}<button class="chip skip" data-pl="">Sem jogador</button></div>`; }
+      const chipB=pl=>`<button class="chip ${pl.pos==='GR'?'gk':''}" data-pl="${pl.id}"><span class="n">${esc(pl.num||'')}</span>${esc(pl.name)}</button>`;
+      const fs=fieldState(m);
+      if(!fs) body=`<div class="chips">${pls.map(chipB).join('')}<button class="chip skip" data-pl="">Sem jogador</button></div>`;
+      else { const onL=pls.filter(p=>fs.on.has(p.id)), bL=pls.filter(p=>fs.bench.has(p.id)), oL=pls.filter(p=>!fs.on.has(p.id)&&!fs.bench.has(p.id));
+        const grp=(t,l,open)=>l.length?`<div class="cu-grp"><span class="cu-lab">${t}</span><div class="chips">${l.map(chipB).join('')}</div></div>`:'';
+        if(pd.type==='subst'&&st==='player') body=grp('Em campo',onL)+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`;
+        else if(pd.type==='subst'&&st==='player2') body=grp('Banco',bL)+(oL.length?`<details><summary class="note">Outros jogadores do plantel</summary>${grp('',oL)}</details>`:'')+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`;
+        else body=grp('Em campo',onL)+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`+((bL.length||oL.length)?`<details><summary class="note">Banco e outros</summary>${grp('Banco',bL)}${grp('Outros',oL)}</details>`:'');
+      } }
     else if(st==='sub'){ prompt=pd.type==='ataque'?'Como terminou o ataque?':pd.type==='canto'?'Para onde foi o canto?':'Tipo de remate'; body=`<div class="chips">${a.subs.map(([k,l])=>`<button class="chip" data-v="sub" data-k="${k}">${l}</button>`).join('')}</div>`; }
     else if(st==='corr'){ prompt='Por que corredor?'; body=`<div class="chips">${CORR.map(([k,l])=>`<button class="chip" data-v="corr" data-k="${k}">${l}</button>`).join('')}</div>`; }
     else if(st==='cons'){ prompt='Consequência'; body=`<div class="chips">${CONS.map(([k,l])=>`<button class="chip ${k==='nada'?'skip':''}" data-v="cons" data-k="${k}">${l}</button>`).join('')}</div>`; }
@@ -728,9 +755,25 @@ function vJogos(){
     <label class="fl">Hora<input class="inp" id="nm-time" placeholder="10h00"></label>
     <label class="fl">Competição<input class="inp" id="nm-comp" placeholder="Campeonato, Taça, Amigável…"></label>
     <label class="fl">Duração de cada parte<select class="inp" id="nm-half">${[45,40,35,30,25,20].map(v=>`<option value="${v}" ${v===S.team.half_len?'selected':''}>${v} min</option>`).join('')}</select></label>
-    <div style="display:flex;align-items:flex-end"><button class="btn pri" type="submit" style="width:100%">Criar e começar registo</button></div></form></section>`:''}
+    <div class="cu" style="grid-column:1/-1">${vCallup()}</div>
+    <div style="display:flex;align-items:flex-end;grid-column:1/-1"><button class="btn pri" type="submit">Criar e começar registo</button></div></form></section>`:''}
   </div>`;
 }
+function vCallup(){
+  const ps=players().filter(p=>p.active!==false).sort((a,b)=>({GR:0,DEF:1,MED:2,AV:3}[a.pos]??2)-({GR:0,DEF:1,MED:2,AV:3}[b.pos]??2)||(+a.num||99)-(+b.num||99));
+  S.callup=S.callup||{}; const c=S.callup, nT=ps.filter(p=>c[p.id]==='T').length, nB=ps.filter(p=>c[p.id]==='B').length;
+  if(!S.cuForm) S.cuForm='4-4-2';
+  return `<div class="sec-h" style="margin:6px 0 8px">Convocatória<span class="sp"></span><span class="pill" id="cuCount">${cuCountTxt(nT,nB)}</span></div>
+    <div class="row" style="margin-bottom:10px;gap:10px"><label class="fl" style="width:180px">Formação<select class="inp" id="cuForm">${FORMS.map(f=>`<option ${f===S.cuForm?'selected':''}>${f}</option>`).join('')}</select></label>
+      <button type="button" class="btn sm" data-cuall="B">Todos no banco</button><button type="button" class="btn sm" data-cuall="">Limpar</button></div>
+    ${ps.length?`<div class="cu-list">${ps.map(p=>`<div class="cu-row"><span class="mono muted">${esc(p.num||'')}</span><span><b>${esc(p.name)}</b>${p.pos?` <span class="role">${esc(p.pos)}</span>`:''}</span>
+      <span class="seg" data-curow="${p.id}">${[['T','Titular'],['B','Banco'],['','Fora']].map(([k,l])=>`<button type="button" aria-pressed="${(c[p.id]||'')===k}" data-cu="${p.id}" data-cv="${k}">${l}</button>`).join('')}</span></div>`).join('')}</div>
+    <p class="note" style="margin:8px 0 0">Os titulares entram no campo pela ordem das posições (GR, DEF, MED, AV). Pode ajustar a posição de cada um depois, no separador Individual → "Editar onze e formação". Se não escolher ninguém, a app sugere o onze no fim do jogo.</p>`
+    :'<p class="note">O plantel desta equipa está vazio. Adicione jogadores no separador Plantel.</p>'}`;
+}
+function cuCountTxt(nT,nB){ const need=formSize(S.cuForm||'4-4-2'), c=S.callup||{}; const gk=players().some(p=>p.pos==='GR'&&c[p.id]==='T'); return `Titulares ${nT}/${need} · Banco ${nB}${nT&&!gk?' · sem GR titular':''}`; }
+function cuRefresh(){ const ps=players(), c=S.callup||{}; const nT=ps.filter(p=>c[p.id]==='T').length, nB=ps.filter(p=>c[p.id]==='B').length; const el=$('cuCount'); if(el){ el.textContent=cuCountTxt(nT,nB); el.style.background=nT===formSize(S.cuForm)?'color-mix(in srgb,var(--good) 18%,var(--card))':''; }
+  document.querySelectorAll('[data-cu]').forEach(b=>b.setAttribute('aria-pressed',String((c[b.dataset.cu]||'')===b.dataset.cv))); }
 function vPlantel(){
   const ps=players(), ed=canEdit();
   return `<div class="view"><section class="card"><h2>Plantel · ${esc(S.team.name)} <span class="pill">${ps.length}</span></h2>
@@ -945,6 +988,9 @@ document.addEventListener('click', async ev=>{
   else if(d.scope){ S.scope=d.scope; render(); }
   else if(d.range){ S.range=d.range; render(); }
   else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
+  else if(d.cu!==undefined&&d.cv!==undefined){ S.callup=S.callup||{}; S.callup[d.cu]=d.cv; cuRefresh(); return; }
+  else if(d.cuall!==undefined){ S.callup={}; if(d.cuall) for(const p of players()) S.callup[p.id]=d.cuall; cuRefresh(); return; }
+  else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else lu.bench.push(d.lubench); S.luOpen=true; touch(m); render(); }
   else if(d.autom){ S.autoM=d.autom; render(); }
   else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
   else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
@@ -978,8 +1024,10 @@ document.addEventListener('submit', async ev=>{
   if(f.id==='newMatch'){
     const row={club_id:S.club.id,team_id:S.team.id,home:g('nm-home')||S.club.name,opp:g('nm-opp')||'Adversário',date:g('nm-date')||null,time:g('nm-time'),comp:g('nm-comp'),half_len:+g('nm-half')||45,status:'nova',
       data:{clock:{half:1,running:false,startedAt:null,base:0},poss:{cur:null,since:null,us:0,opp:0},events:[]}};
+    const cu=S.callup||{}; if(Object.values(cu).some(v=>v==='T'||v==='B')){ row.data.lineup=buildLineup(cu,S.cuForm||'4-4-2'); }
     const { data, error } = await sb.from('matches').insert(row).select().single();
     if(error){ toast('Não foi possível criar o jogo: '+error.message); return; }
+    S.callup={};
     S.matches[data.id]=fromRow(data); S.cur=data.id; location.hash='#registo'; render(); toast('Jogo criado. Carregue em Iniciar quando o árbitro apitar.'); return;
   }
   if(f.id==='addP'){
@@ -1027,6 +1075,7 @@ document.addEventListener('change', async ev=>{
     else if(d.luslot!==undefined){ const k=+d.luslot, v=el.value||null; const j=lu.slots.indexOf(v); if(v&&j>=0&&j!==k) lu.slots[j]=lu.slots[k]||null; lu.slots[k]=v; }
     else { lu.override=lu.override||{}; if(el.value==='') delete lu.override[d.luov]; else lu.override[d.luov]=Math.max(0,Math.min(10,+el.value)); }
     touch(m); render(); return; }
+  if(el.id==='cuForm'){ S.cuForm=el.value; cuRefresh(); return; }
   if(el.id==='selSeason'){ S.season=+el.value; render(); return; }
   if(d.pf){ const p=S.players.find(x=>x.id===d.id); if(!p) return; p[d.pf]=el.value.trim(); const { error }=await sb.from('players').update({[d.pf]:p[d.pf]}).eq('id',p.id); if(error) toast(error.message); else toast('Plantel gravado.'); return; }
   if(d.tf){ const t=S.teams.find(x=>x.id===d.id); const v=d.tf==='half_len'?+el.value:el.value.trim(); const { error }=await sb.from('teams').update({[d.tf]:v}).eq('id',t.id); if(error) toast(error.message); else { t[d.tf]=v; renderHeader(); toast('Equipa gravada.'); } return; }
