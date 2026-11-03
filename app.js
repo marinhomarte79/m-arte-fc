@@ -741,7 +741,15 @@ document.addEventListener('submit', async ev=>{
     S.admin.loaded=false; say('admin','Clube criado: '+club.name+'.'+extra); return;
   }
   if(f.id==='fName'){ const { error }=await sb.from('profiles').update({full_name:g('me-name')}).eq('user_id',S.session.user.id); if(error) say('conta',error.message,true); else { S.profile.full_name=g('me-name'); say('conta','Nome gravado.'); } return; }
-  if(f.id==='fPass'){ const { error }=await sb.auth.updateUser({password:$('me-pass').value}); say('conta',error?error.message:'Palavra-passe alterada.',!!error); return; }
+  if(f.id==='fPass'){
+    const btn=f.querySelector('button'); btn.disabled=true; btn.textContent='A gravar…';
+    const { error }=await sb.auth.updateUser({password:$('me-pass').value});
+    let t='Palavra-passe alterada. Use a nova da próxima vez que entrar.';
+    if(error){ t = error.code==='same_password'||/different from the old/i.test(error.message) ? 'Essa já é a sua palavra-passe actual. Para mudar, escreva uma diferente.'
+      : error.code==='weak_password'||/weak|at least/i.test(error.message) ? 'Palavra-passe fraca: use pelo menos 8 caracteres, com letras e números.'
+      : 'Não foi possível alterar: '+error.message; }
+    say('conta',t,!!error); return;
+  }
 });
 
 document.addEventListener('change', async ev=>{
