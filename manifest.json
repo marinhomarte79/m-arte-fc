@@ -1,0 +1,9 @@
+{
+  "name": "M ARTE FC Match Analyst",
+  "short_name": "M Arte FC",
+  "start_url": "./#registo",
+  "display": "standalone",
+  "background_color": "#EDF0EB",
+  "theme_color": "#C3262C",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
