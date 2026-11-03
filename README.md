@@ -5,7 +5,7 @@ Desenvolvido para a **M Arte Design** (Esposende).
 
 - **Alojamento:** GitHub Pages (este repositório, ramo `main`).
 - **Dados e logins:** Supabase, projecto `m-arte-fc`. Cada clube só vê os seus dados (regras RLS na base de dados).
-- **Relatório IA:** função de servidor `ai-report` no Supabase. A chave da IA fica guardada no servidor (`ANTHROPIC_API_KEY`), nunca no navegador.
+- **Relatório IA:** função de servidor `ai-report` no Supabase, com Google Gemini (`GEMINI_API_KEY`, modelo `gemini-3.8-flash`). Para usar a Anthropic: `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`. As chaves ficam no servidor, nunca no navegador.
 
 ## Perfis
 | Perfil | Pode |
