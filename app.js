@@ -205,10 +205,24 @@ let toastT; function toast(t){ const el=$('toast'); el.textContent=t; el.hidden=
 /* =========================================================
    CAMPO (SVG) — 105 × 68, 3 zonas como na ficha
    ========================================================= */
-function pitchSVG({markers=[],zones=null,id='',labels=true}={}){
+let HEATN=0;
+function heatLayer(pts,W,H){
+  if(!pts.length) return '';
+  const nx=42, ny=27, cw=W/nx, ch=H/ny, g=new Float32Array(nx*ny), sig=5.5, s2=2*sig*sig;
+  for(const p of pts){ const px=p.x*W/100, py=p.y*H/100;
+    for(let j=0;j<ny;j++){ const cy=(j+.5)*ch, dy=cy-py; if(Math.abs(dy)>3*sig) continue;
+      for(let i=0;i<nx;i++){ const cx=(i+.5)*cw, dx=cx-px; if(Math.abs(dx)>3*sig) continue; g[j*nx+i]+=Math.exp(-(dx*dx+dy*dy)/s2); } } }
+  let mx=0; for(const v of g) if(v>mx) mx=v; if(!mx) return '';
+  const fid='hb'+(++HEATN), ramp=v=>{ const a=[[255,240,90],[255,160,30],[235,60,30],[160,0,40]]; const t=Math.min(.999,v)*(a.length-1), k=Math.floor(t), f=t-k; const c=a[k].map((x,q)=>Math.round(x+(a[k+1][q]-x)*f)); return `rgb(${c})`; };
+  let r=`<defs><filter id="${fid}" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="1.8"/></filter></defs><g filter="url(#${fid})">`;
+  for(let j=0;j<ny;j++) for(let i=0;i<nx;i++){ const v=g[j*nx+i]/mx; if(v<0.14) continue; r+=`<rect x="${(i*cw).toFixed(2)}" y="${(j*ch).toFixed(2)}" width="${(cw+.15).toFixed(2)}" height="${(ch+.15).toFixed(2)}" fill="${ramp(v)}" opacity="${Math.min(.85,v*.95).toFixed(2)}"/>`; }
+  return r+'</g>';
+}
+function pitchSVG({markers=[],zones=null,id='',labels=true,heat=null}={}){
   const W=105,H=68; let s=`<svg class="pitch" ${id?`id="${id}"`:''} viewBox="-2 -2 109 72" role="img" aria-label="Campo, ataque da esquerda para a direita">`;
   for(let i=0;i<10;i++) s+=`<rect class="${i%2?'pg2':'pg1'}" x="${i*10.5}" y="0" width="10.5" height="${H}"/>`;
   s+=`<rect class="pg1" x="-2" y="-2" width="109" height="2"/><rect class="pg1" x="-2" y="68" width="109" height="2"/><rect class="pg1" x="-2" y="0" width="2" height="68"/><rect class="pg1" x="105" y="0" width="2" height="68"/>`;
+  if(heat) s+=heatLayer(heat,W,H);
   if(zones){ const mx=Math.max(1,zones.def,zones.inter,zones.ofen),tot=Math.max(1,zones.def+zones.inter+zones.ofen);
     [['def',0],['inter',35],['ofen',70]].forEach(([k,x])=>{ s+=`<rect class="zfill" x="${x}" y="0" width="35" height="68" opacity="${(zones[k]/mx*0.38).toFixed(2)}"/><text class="zcount" x="${x+17.5}" y="37" text-anchor="middle">${zones[k]}</text><text class="zpct" x="${x+17.5}" y="42" text-anchor="middle">${Math.round(zones[k]/tot*100)}%</text>`; }); }
   s+=`<g class="pl"><rect x="0" y="0" width="${W}" height="${H}"/><line x1="52.5" y1="0" x2="52.5" y2="68"/><circle cx="52.5" cy="34" r="9.15"/><rect x="0" y="13.84" width="16.5" height="40.32"/><rect x="88.5" y="13.84" width="16.5" height="40.32"/><rect x="0" y="24.84" width="5.5" height="18.32"/><rect x="99.5" y="24.84" width="5.5" height="18.32"/><rect x="-1.6" y="30.34" width="1.6" height="7.32"/><rect x="105" y="30.34" width="1.6" height="7.32"/><path d="M16.5 26.7 A9.15 9.15 0 0 1 16.5 41.3"/><path d="M88.5 26.7 A9.15 9.15 0 0 0 88.5 41.3"/></g><circle class="pd" cx="52.5" cy="34" r=".45"/><circle class="pd" cx="11" cy="34" r=".4"/><circle class="pd" cx="94" cy="34" r=".4"/><line class="pthird" x1="35" y1="0" x2="35" y2="68"/><line class="pthird" x1="70" y1="0" x2="70" y2="68"/>`;
@@ -596,11 +610,22 @@ function ratingLine(games){
   return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:230px;height:auto" role="img" aria-label="Evolução da nota">${g}<path d="${d}" fill="none" stroke="var(--red)" stroke-width="2.2"/>
     ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.r)}" r="4" class="rtc ${rtCls(p.r)}"><title>${esc(p.m.opp)}: ${f1r(p.r)}</title></circle><text x="${X(i)}" y="${Y(p.r)-10}" font-size="12" font-weight="700" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--ink)">${f1r(p.r)}</text><text x="${X(i)}" y="${H-8}" font-size="11" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--muted)">${esc(fmtDate(p.m.date).slice(0,5))} ${esc(short(p.m.opp).slice(0,12))}</text>`).join('')}</svg></div>`;
 }
+function radarDark(axes){
+  const W=300,H=270,cx=150,cy=138,R=92,n=axes.length, ang=i=>-Math.PI/2+i*2*Math.PI/n, P=(i,v)=>[cx+Math.cos(ang(i))*R*v, cy+Math.sin(ang(i))*R*v];
+  let g=''; for(const k of [0.33,0.66,1]) g+=`<polygon points="${axes.map((_,i)=>P(i,k).join(',')).join(' ')}" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>`;
+  axes.forEach((a,i)=>{ const [x,y]=P(i,1); g+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,.18)"/>`; const [lx,ly]=P(i,1.22); g+=`<text x="${lx}" y="${ly+4}" font-size="10.5" font-weight="700" letter-spacing=".6" text-anchor="${Math.abs(lx-cx)<8?'middle':lx>cx?'start':'end'}" fill="#fff">${a.l.toUpperCase()}</text>`; });
+  const team=axes.map((a,i)=>P(i,a.t).join(',')).join(' '), me=axes.map((a,i)=>P(i,a.v).join(',')).join(' ');
+  return `<svg viewBox="-50 0 ${W+100} ${H}" class="hx-radar" role="img" aria-label="Perfil do jogador comparado com a equipa">${g}
+    <polygon points="${team}" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.45)" stroke-width="1" stroke-dasharray="3 3"/>
+    <polygon points="${me}" fill="rgba(120,200,255,.28)" stroke="#9fd8ff" stroke-width="2"/>
+    ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x}" cy="${y}" r="3.4" fill="#fff"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>`;
+}
+const HEAT_T=[['all','Todas'],['rec','Recuperações'],['perda','Perdas'],['pe','Passes errados'],['falta','Faltas'],['shot','Remates']];
 function vJogador(){
   const p=S.players.find(x=>x.id===S.playerId), ed=canEdit(), E=ed&&S.fichaEdit;
   const games=playerGames(p.id), pl=games.filter(g=>g.played);
   const sum=k=>pl.reduce((a,g)=>a+(g[k]||0),0), mins=pl.reduce((a,g)=>a+(g.min||0),0), rs=pl.filter(g=>g.r!=null).map(g=>g.r);
-  const avgR=rs.length?rs.reduce((a,b)=>a+b,0)/rs.length:null, bestR=rs.length?Math.max(...rs):null;
+  const avgR=rs.length?rs.reduce((a,b)=>a+b,0)/rs.length:null;
   const age=ageOf(p.birth_date), ov=attrsOverall(p);
   const team=seasonPlayers(seasonMatches()).filter(r=>r.jogos>0), me=team.find(r=>r.id===p.id);
   const per=(r,k)=>r.jogos?r[k]/r.jogos:0, avgT=k=>team.length?team.reduce((a,r)=>a+per(r,k),0)/team.length:0, mx=k=>Math.max(0.001,...team.map(r=>per(r,k)));
@@ -608,25 +633,39 @@ function vJogador(){
   const axes=me?axDef.map(([l,k,dir])=>{ const v=per(me,k)/mx(k), t=avgT(k)/mx(k); return {l, v:dir>0?v:1-v, t:dir>0?t:1-t, txt:per(me,k).toFixed(1).replace('.',',')+'/jogo'}; }):null;
   const isGK=p.pos==='GR', groups=isGK?[GK_ATTR,...ATTR_G]:ATTR_G, A=p.attrs||{};
   const f1=v=>v.toFixed(1).replace('.',','), inp=(k,type='text',extra='')=>`<input class="inp" id="pf-${k}" type="${type}" value="${esc(p[k]??'')}" ${extra}>`;
-  const field=(l,v)=>`<div class="pf-f"><span>${l}</span><b>${v||'—'}</b></div>`;
-  return `<div class="view">
-  <div class="row"><a class="btn sm" href="#plantel">← Plantel</a><span class="sp"></span>${ed?(E?'':`<button class="btn pri" data-fichaedit>Editar ficha</button>`):''}</div>
-  <section class="card pf-head">
-    <div class="pf-photo">${avatar(p,'xl')}${E?`<label class="btn sm" style="margin-top:8px">Mudar foto<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}</div>
-    <div class="pf-main">
-      <div class="pf-num">${esc(p.num||'')}</div>
-      <h1 class="pf-name">${esc(p.name)}</h1>
-      ${p.full_name?`<div class="muted">${esc(p.full_name)}</div>`:''}
-      <div class="row" style="margin-top:8px;gap:6px"><span class="pill">${POS_L[p.pos||'']}</span>${p.pos2?`<span class="pill">${esc(p.pos2)}</span>`:''}${statusPill(p)}</div>
-      <div class="pf-facts">
-        ${field('Idade',age!=null?age+' anos':'')}${field('Nascimento',fmtDate(p.birth_date))}${field('Nacionalidade',esc(p.nationality))}
-        ${field('Pé preferido',esc(p.foot))}${field('Altura',p.height_cm?p.height_cm+' cm':'')}${field('Peso',p.weight_kg?p.weight_kg+' kg':'')}
-        ${field('No clube desde',fmtDate(p.joined))}${field('Vínculo até',fmtDate(p.contract_until))}${field('Equipa',esc(S.team.name))}
+  const nm=String(p.full_name||p.name).trim().split(/\s+/), last=nm.length>1?nm.pop():nm[0], first=nm.length&&nm[0]!==last?nm.join(' '):'';
+  const photo=S.photos&&S.photos[p.id];
+  // heat events of this player in period
+  const ht=S.heatType||'all', tf={all:e=>true,rec:e=>e.type==='rec',perda:e=>e.type==='perda',pe:e=>e.type==='pe',falta:e=>e.type==='fc'||e.type==='fs',shot:isShot}[ht]||(()=>true);
+  const evAll=[]; for(const g of pl) for(const e of g.m.events) if(e.p===p.id&&e.x!=null) evAll.push(e);
+  const hev=evAll.filter(tf);
+  const zc={def:hev.filter(e=>e.z==='def').length,inter:hev.filter(e=>e.z==='inter').length,ofen:hev.filter(e=>e.z==='ofen').length}, zt=Math.max(1,zc.def+zc.inter+zc.ofen);
+  const circ=(v,l,cls='')=>`<div class="hx-c ${cls}"><b>${v}</b><span>${l}</span></div>`;
+  const bar=(l,v,t,mxv,txt)=>`<div class="hx-bar"><span class="hx-bl">${l}</span><span class="hx-bt"><i style="width:${Math.min(100,v/mxv*100)}%"></i><em style="left:${Math.min(100,t/mxv*100)}%" title="Média da equipa"></em></span><span class="hx-bv">${txt}</span></div>`;
+  const pg=k=>pl.length?sum(k)/pl.length:0, tg=k=>avgT(k);
+  // carousel
+  const posF=S.pfPos||'', strip=players().filter(x=>!posF||x.pos===posF).sort((a,b)=>({GR:0,DEF:1,MED:2,AV:3}[a.pos]??4)-({GR:0,DEF:1,MED:2,AV:3}[b.pos]??4)||(+a.num||99)-(+b.num||99));
+  return `<div class="view pfx">
+  <section class="hx">
+    <div class="hx-top"><a class="hx-back" href="#plantel">← Plantel</a><span class="hx-crumb">${esc(S.club.name)} · ${esc(S.team.name)}</span><span class="sp"></span>${scopeBarAuto()}${ed&&!E?`<button class="btn pri" data-fichaedit>Editar ficha</button>`:''}</div>
+    <div class="hx-grid">
+      <div class="hx-id">
+        <div class="hx-num">${esc(p.num||'')}</div>
+        <div class="hx-name">${first?`<span>${esc(first)}</span>`:''}<b>${esc(last)}</b></div>
+        <div class="hx-pos">${esc(p.pos2||POS_L[p.pos||''])}</div>
+        <div class="hx-meta">${p.nationality?`Nacionalidade: ${esc(p.nationality)}<br>`:''}${p.birth_date?`Nascido a ${esc(fmtDate(p.birth_date))}${age!=null?` (${age} anos)`:''}<br>`:''}${p.height_cm?`Altura: ${p.height_cm} cm`:''}${p.foot?` · Pé ${esc(p.foot.toLowerCase())}`:''}</div>
+        <div class="hx-status">${statusPill(p)}</div>
+      </div>
+      <div class="hx-photo">${photo?`<img src="${esc(photo)}" alt="${esc(p.name)}">`:`<div class="hx-ph">${esc(p.num||initials(p.name))}</div>`}
+        ${E?`<label class="btn sm hx-upl">Mudar foto<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}</div>
+      <div class="hx-stats">
+        <div class="hx-circles">${circ(pl.length,'Jogos')}${circ(pl.filter(g=>g.started).length,'Titular')}${circ(mins,'Minutos')}${circ(sum('golos'),'Golos')}${circ(avgR!=null?f1r(avgR):'—','Nota','hx-rt '+(avgR!=null?rtCls(avgR):''))}${circ(sum('am'),'Amarelos','hx-y')}${circ(sum('vm'),'Vermelhos','hx-r')}</div>
+        <div class="hx-sub"><span>Perfil de jogo</span>${ov!=null?`<span class="hx-ov">Avaliação geral <b>${f1(ov)}</b></span>`:''}</div>
+        ${axes?radarDark(axes):'<p class="hx-empty">Sem jogos neste período.</p>'}
       </div>
     </div>
-    <div class="pf-ov"><span>Avaliação geral</span><b class="${ov!=null?rtCls(ov):''}">${ov!=null?f1(ov):'—'}</b><small>média dos atributos (1–10)</small></div>
   </section>
-  ${E?`<section class="card"><h2>Editar dados</h2><form id="fichaForm" class="formrow">
+  ${E?`<section class="card"><h2>Editar ficha</h2><form id="fichaForm" class="formrow">
     <label class="fl">Nome desportivo${inp('name','text','required')}</label>
     <label class="fl">Nome completo${inp('full_name')}</label>
     <label class="fl">Número${inp('num','text','inputmode="numeric"')}</label>
@@ -647,28 +686,37 @@ function vJogador(){
     <div class="row" style="grid-column:1/-1"><button class="btn pri" type="submit">Gravar ficha</button><button class="btn" type="button" data-fichacancel>Cancelar</button></div>
   </form></section>`:''}
   ${p.status&&p.status!=='disponivel'&&p.status_note?`<div class="banner">${esc(STATUS[p.status][0])}: ${esc(p.status_note)}</div>`:''}
-  <div class="row" style="justify-content:space-between"><div class="sec-h" style="margin:0">Estatísticas · Época ${seasonLabel(S.season)}</div>${scopeBarAuto()}</div>
-  <div class="kpis">
-    <div class="kpi"><span>Jogos</span><b>${pl.length}</b><small>${pl.filter(g=>g.started).length} titular · ${pl.filter(g=>g.sub).length} suplente</small></div>
-    <div class="kpi"><span>Minutos</span><b>${mins}</b><small>${pl.some(g=>g.approx)?'estimados; há jogos com onze sugerido':'pelo onze e substituições'}</small></div>
-    <div class="kpi"><span>Nota média</span><b>${avgR!=null?`<span class="rt ${rtCls(avgR)}" style="font-size:24px">${f1r(avgR)}</span>`:'—'}</b><small>melhor ${bestR!=null?f1r(bestR):'—'}</small></div>
-    <div class="kpi"><span>Golos</span><b>${sum('golos')}</b><small>${sum('shots')} remates · ${sum('on')} à baliza</small></div>
-    <div class="kpi"><span>Recuperações</span><b>${sum('rec')}</b><small>${pl.length?f1(sum('rec')/pl.length):'0'} por jogo</small></div>
-    <div class="kpi"><span>Perdas + p. err.</span><b>${sum('perda')+sum('pe')}</b><small>${pl.length?f1((sum('perda')+sum('pe'))/pl.length):'0'} por jogo</small></div>
-    <div class="kpi"><span>${isGK?'Defesas':'Faltas C / S'}</span><b>${isGK?sum('def'):sum('fc')+' / '+sum('fs')}</b><small>${isGK?'completas, incompletas e p/ canto':'cometidas / sofridas'}</small></div>
-    <div class="kpi"><span>Cartões</span><b>${sum('am')} <span style="color:var(--gold)">■</span> ${sum('vm')} <span style="color:var(--red)">■</span></b><small>amarelos · vermelhos</small></div>
-  </div>
-  <div class="g2">
-    <section class="card"><h2>Perfil de jogo</h2>${axes?radarSVG(axes):'<p class="note">Sem jogos neste período.</p>'}<p class="note" style="margin:6px 0 0">Valores por jogo comparados com os colegas de equipa (o máximo da equipa = extremidade). Conservação, passe e disciplina: quanto menos perdas, passes errados e faltas, mais longe do centro.</p></section>
-    <section class="card"><h2>Avaliação técnica do treinador</h2>
-      ${groups.map(([g,list])=>{ const vs=list.map(([k])=>+A[k]||0).filter(Boolean); return `<div class="pf-g"><div class="sec-h" style="margin-bottom:4px">${g}${vs.length?`<span class="sp"></span><span class="pill">${f1(vs.reduce((a,b)=>a+b,0)/vs.length)}</span>`:''}</div>${list.map(([k,l])=>{ const v=+A[k]||0; return `<div class="bar" style="grid-template-columns:150px minmax(0,1fr) 30px"><span>${l}</span><span class="tr"><i style="width:${v*10}%;background:${v>=8?'var(--good)':v>=6?'var(--pe)':v?'var(--red)':'transparent'}"></i></span><span class="v">${v||'—'}</span></div>`; }).join('')}</div>`; }).join('')}
-      ${!Object.values(A).some(Number)?`<p class="note">${ed?'Ainda sem avaliação. Carregue em "Editar ficha" para atribuir de 1 a 10.':'Ainda sem avaliação do treinador.'}</p>`:''}</section>
-  </div>
+  <section class="hx hx-b">
+    <div class="hx-grid2">
+      <div class="hx-map">
+        <div class="hx-tabs">${HEAT_T.map(([k,l])=>`<button class="${ht===k?'on':''}" data-heatt="${k}">${l}</button>`).join('')}</div>
+        <div class="hx-pitch">${pitchSVG({heat:hev,labels:true})}</div>
+        <div class="hx-legend"><span>Mapa de calor · ${hev.length} acção(ões) com localização</span><span class="hx-ramp"><i></i>menos — mais</span></div>
+        <div class="hx-zones">${[['def','Z. Defensiva'],['inter','Z. Intermédia'],['ofen','Z. Ofensiva']].map(([k,l])=>`<div><b>${Math.round(zc[k]/zt*100)}%</b><span>${l}</span></div>`).join('')}</div>
+      </div>
+      <div class="hx-right">
+        <div class="hx-h">Por jogo · jogador vs média da equipa</div>
+        ${(()=>{ const rows=[['Recuperações','rec'],['Perdas','perda'],['Passes errados','pe'],['Remates','shot'],['Faltas cometidas','fc'],['Faltas sofridas','fs']]; return rows.map(([l,k])=>{ const v=pg(k), t=tg(k), m=Math.max(0.5,v,t,mx(k)); return bar(l,v,t,m,f1(v)); }).join(''); })()}
+        <div class="hx-note">A marca branca indica a média da equipa.</div>
+        <div class="hx-h" style="margin-top:14px">Avaliação técnica do treinador</div>
+        <div class="hx-attrs">${groups.map(([g,list])=>{ const vs=list.map(([k])=>+A[k]||0).filter(Boolean), av=vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; return `<div class="hx-ag"><b>${av!=null?f1(av):'—'}</b><span>${g}</span><div>${list.map(([k,l])=>{ const v=+A[k]||0; return `<div class="hx-ar"><span>${l}</span><i style="--w:${v*10}%"></i><em>${v||'—'}</em></div>`; }).join('')}</div></div>`; }).join('')}</div>
+        ${!Object.values(A).some(Number)?`<div class="hx-note">${ed?'Ainda sem avaliação. Use "Editar ficha" para atribuir de 1 a 10.':'Ainda sem avaliação do treinador.'}</div>`:''}
+      </div>
+    </div>
+  </section>
   <section class="card"><h2>Evolução da nota</h2>${ratingLine(games)}</section>
+  <div>
+    <section class="card"><h2>Dados do jogador</h2><div class="pf-facts" style="margin:0">
+      ${[['Nome completo',esc(p.full_name)],['Posição',esc(POS_L[p.pos||''])],['Posição específica',esc(p.pos2)],['Pé preferido',esc(p.foot)],['Altura',p.height_cm?p.height_cm+' cm':''],['Peso',p.weight_kg?p.weight_kg+' kg':''],['No clube desde',fmtDate(p.joined)],['Vínculo até',fmtDate(p.contract_until)],['Estado',(STATUS[p.status||'disponivel']||STATUS.disponivel)[0]]].map(([l,v])=>`<div class="pf-f"><span>${l}</span><b>${v||'—'}</b></div>`).join('')}</div></section>
+  </div>
   <section class="card"><h2>Jogos na época</h2><div class="tscroll"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Estatuto</th><th>Min.</th><th>Nota</th><th>Rec.</th><th>Perdas</th><th>P. err.</th><th>Remates</th><th>Golos</th><th>Cartões</th></tr></thead><tbody>
     ${[...games].reverse().map(g=>g.played?`<tr><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>${g.started?'Titular':g.sub?'Suplente':'—'}</td><td>${g.min??'—'}</td><td>${g.r!=null?`<span class="rt ${rtCls(g.r)}">${f1r(g.r)}</span>`:'—'}</td><td>${g.rec}</td><td>${g.perda}</td><td>${g.pe}</td><td>${g.shots}</td><td>${g.golos||''}</td><td>${g.am?'🟨'.repeat(g.am):''}${g.vm?'🟥':''}</td></tr>`:`<tr class="muted"><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>Banco (não utilizado)</td><td colspan="8"></td></tr>`).join('')||'<tr><td class="l muted" colspan="11">Sem jogos neste período.</td></tr>'}
   </tbody></table></div></section>
   ${p.notes?`<section class="card"><h2>Observações e plano de desenvolvimento</h2><p style="white-space:pre-wrap;margin:0;max-width:80ch">${esc(p.notes)}</p></section>`:''}
+  <section class="hx hx-strip">
+    <div class="hx-stabs">${[['','Todos'],['GR','Guarda-redes'],['DEF','Defesas'],['MED','Médios'],['AV','Avançados']].map(([k,l])=>`<button class="${posF===k?'on':''}" data-pfpos="${k}">${l}</button>`).join('')}</div>
+    <div class="hx-rail">${strip.map(x=>`<button class="hx-th ${x.id===p.id?'on':''}" data-ficha="${x.id}">${S.photos&&S.photos[x.id]?`<img src="${esc(S.photos[x.id])}" alt="">`:`<span>${esc(x.num||initials(x.name))}</span>`}<em>${esc(x.num?x.num+' ':'')}${esc(x.name)}</em></button>`).join('')||'<span class="hx-empty">Sem jogadores nesta posição.</span>'}</div>
+  </section>
   </div>`;
 }
 async function resizeImage(file){
@@ -837,10 +885,10 @@ function vAnalise(m){
     <tbody>${zrows.map(tr).join('')}<tr><td><b>Remates efectuados</b></td><td class="band">${sh.baliza[0]}</td><td class="band">${sh.baliza[1]}</td><td>${sh.fora[0]}</td><td>${sh.fora[1]}</td><td class="band">${sh.interc[0]}</td><td class="band">${sh.interc[1]}</td><td>${sh.h[0]}</td><td>${sh.h[1]}</td><td class="tot">${sh.t}</td><td>${sh.top?esc(sh.top.name)+' <span class="muted">('+sh.top.n+')</span>':'—'}</td></tr></tbody></table></div>
     <p class="note" style="margin:8px 0 0">Na linha dos remates as colunas são Baliza · Fora · Interceptado (1ª e 2ª parte), como na folha Estatística.</p></section>
   <div class="g-map">
-    <section class="card"><h2>Mapa de acções<span class="sp"></span><span class="seg">${[['all','Jogo'],['1','1ª'],['2','2ª']].map(([k,l])=>`<button aria-pressed="${S.mapHalf==k}" data-mh="${k}">${l}</button>`).join('')}</span></h2>
+    <section class="card"><h2>Mapa de acções<span class="sp"></span><span class="seg"><button aria-pressed="${S.mapMode!=='heat'}" data-mapmode="pts">Pontos</button><button aria-pressed="${S.mapMode==='heat'}" data-mapmode="heat">Mapa de calor</button></span><span class="seg">${[['all','Jogo'],['1','1ª'],['2','2ª']].map(([k,l])=>`<button aria-pressed="${S.mapHalf==k}" data-mh="${k}">${l}</button>`).join('')}</span></h2>
       <div class="row" style="margin-bottom:10px"><span class="seg" style="flex-wrap:wrap">${layers.map(([k,l])=>`<button aria-pressed="${S.layer===k}" data-layer="${k}">${l}</button>`).join('')}</span></div>
-      ${pitchSVG({markers:marks,zones})}
-      ${S.layer==='shot'?`<div class="legend"><span><i style="background:#fff"></i>À baliza</span><span><i style="background:var(--gold)"></i>Golo</span><span>○ Fora</span><span>× Interceptado</span></div>`:`<p class="note" style="margin:8px 0 0">Número e percentagem por zona; pontos onde a localização foi registada.</p>`}</section>
+      ${S.mapMode==='heat'?pitchSVG({heat:lev.filter(e=>e.x!=null)}):pitchSVG({markers:marks,zones})}
+      ${S.layer==='shot'?`<div class="legend"><span><i style="background:#fff"></i>À baliza</span><span><i style="background:var(--gold)"></i>Golo</span><span>○ Fora</span><span>× Interceptado</span></div>`:(S.mapMode==='heat'?`<div class="legend"><span class="hx-ramp" style="color:var(--muted)"><i></i>menos — mais acções</span><span>${lev.filter(e=>e.x!=null).length} acções com localização</span></div>`:`<p class="note" style="margin:8px 0 0">Número e percentagem por zona; pontos onde a localização foi registada.</p>`)}</section>
     <section class="view" style="gap:16px">
       <div class="card"><h2>Ataques efectuados vs sofridos</h2><div class="corr">${CORR.map(([k,l])=>`<div><span>${l.replace('Corredor ','')}</span><b>${cb(k)}</b><small>${s.atk.by[k][0]} + ${s.atk.by[k][1]} · ${cshot(k)} c/ remate</small><small style="color:var(--opp)">sofridos ${ca(k)}</small></div>`).join('')}</div></div>
       <div class="card"><h2>Consequência dos ataques</h2><div class="bars">${ATQ_CONS.map(([k,l])=>`<div class="bar"><span>${l}</span><span class="tr"><i style="width:${s.atk.cons[k][0]/consMax*100}%;background:var(--red)"></i><i style="width:${s.atk.cons[k][1]/consMax*100}%;background:color-mix(in srgb,var(--red) 45%,var(--card))"></i></span><span class="v">${consT[k]}</span></div>`).join('')}</div>
@@ -1127,6 +1175,9 @@ document.addEventListener('click', async ev=>{
   else if(d.del) delEvent(d.del);
   else if(d.layer){ S.layer=d.layer; render(); }
   else if(d.mh){ S.mapHalf=d.mh; render(); }
+  else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
+  else if(d.heatt){ S.heatType=d.heatt; render(); }
+  else if(d.pfpos!==undefined){ S.pfPos=d.pfpos; render(); }
   else if(d.scope){ S.scope=d.scope; render(); }
   else if(d.range){ S.range=d.range; render(); }
   else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
@@ -1140,7 +1191,7 @@ document.addEventListener('click', async ev=>{
     for(const p of players().filter(p=>p.active!==false)){ if(c[p.id]) continue; if(nB<MAX_BENCH){ c[p.id]='B'; nB++; } else left++; }
     if(left) toast(`Banco completo (${MAX_BENCH}). ${left} jogador(es) ficaram fora.`); cuRefresh(); return; }
   else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else { if(lu.bench.length>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes no banco.`); return; } lu.bench.push(d.lubench); } S.luOpen=true; touch(m); render(); }
-  else if(d.ficha){ S.playerId=d.ficha; S.fichaEdit=false; location.hash='#jogador'; render(); }
+  else if(d.ficha){ S.playerId=d.ficha; S.fichaEdit=false; location.hash='#jogador'; render(); window.scrollTo({top:0,behavior:'smooth'}); }
   else if(d.fichaedit!==undefined){ S.fichaEdit=true; render(); }
   else if(d.fichacancel!==undefined){ S.fichaEdit=false; render(); }
   else if(d.autom){ S.autoM=d.autom; render(); }
