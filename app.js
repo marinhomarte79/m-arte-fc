@@ -833,6 +833,39 @@ function vPerfilEdit(p){
       <button type="button" class="btn sm" data-cradd style="margin-top:6px;justify-self:start">+ Acrescentar época</button></div>`;
 }
 function ppCrRow(r){ r=r||{}; return `<div class="pp-crr"><input class="inp" data-cr="ep" placeholder="Época (2024/25)" value="${esc(r.ep||'')}"><input class="inp" data-cr="clube" placeholder="Clube" value="${esc(r.clube||'')}"><input class="inp" data-cr="esc" placeholder="Escalão" value="${esc(r.esc||'')}"><input class="inp" data-cr="j" placeholder="Jogos" inputmode="numeric" value="${esc(r.j??'')}"><input class="inp" data-cr="g" placeholder="Golos" inputmode="numeric" value="${esc(r.g??'')}"><button type="button" class="btn sm ghost" data-crdel aria-label="Apagar época">×</button></div>`; }
+/* ---------- ficha estilo "Inter": gráficos do cabeçalho ---------- */
+function ihPie(shots){
+  const parts=[['Golo',shots.filter(e=>e.type==='golo').length,'#4ADE80'],['À baliza',shots.filter(e=>e.type==='remate'&&e.sub==='baliza').length,'#4CC3FF'],['Fora',shots.filter(e=>e.type==='remate'&&e.sub==='fora').length,'#94A3B8'],['Interceptado',shots.filter(e=>e.type==='remate'&&e.sub==='interc').length,'#FFA24C']].filter(x=>x[1]>0);
+  const tot=parts.reduce((a,x)=>a+x[1],0);
+  if(!tot) return '<div class="ih-pie-empty"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.15)"/></svg><span>Sem remates</span></div>';
+  let a0=-Math.PI/2, g='';
+  for(const [l,v,c] of parts){ const a1=a0+v/tot*2*Math.PI, big=a1-a0>Math.PI?1:0, r=52;
+    const p=(a)=>[60+r*Math.cos(a),60+r*Math.sin(a)];
+    g+= parts.length===1?`<circle cx="60" cy="60" r="${r}" fill="${c}" fill-opacity=".75"/>`:`<path d="M60 60 L${p(a0).map(n=>n.toFixed(2)).join(' ')} A${r} ${r} 0 ${big} 1 ${p(a1).map(n=>n.toFixed(2)).join(' ')}Z" fill="${c}" fill-opacity=".75" stroke="#0A1B2E" stroke-width="1"/>`;
+    const am=(a0+a1)/2, tx=60+30*Math.cos(am), ty=60+30*Math.sin(am);
+    g+=`<text x="${tx.toFixed(1)}" y="${(ty+5).toFixed(1)}" text-anchor="middle" font-size="15" font-weight="800" fill="#fff" font-family="Barlow Condensed,Arial Narrow,sans-serif">${v}</text>`;
+    a0=a1; }
+  return `<div class="ih-pie"><svg viewBox="0 0 120 120" role="img" aria-label="Remates: ${parts.map(x=>x[0]+' '+x[1]).join(', ')}">${g}</svg><ul>${parts.map(([l,v,c])=>`<li><i style="background:${c}"></i>${l} <b>${v}</b></li>`).join('')}</ul></div>`;
+}
+function ihMap(ht,hev){
+  if(ht==='all') return pitchSVG({heat:hev,labels:false});
+  const col=e=>ht==='falta'?(e.type==='fc'?'#FACC15':'#4CC3FF'):ht==='shot'?(e.type==='golo'?'#4ADE80':e.sub==='baliza'?'#4CC3FF':e.sub==='fora'?'#fff':'#FFA24C'):ht==='rec'?'#4ADE80':ht==='perda'?'#F87171':'#FACC15';
+  return pitchSVG({labels:false,markers:hev.map(e=>({x:e.x,y:e.y,c:col(e),r:1.5,t:ACT[e.type].l}))});
+}
+function ihLegend(ht,hev){
+  const n=f=>hev.filter(f).length;
+  if(ht==='all') return `<span>Mapa de calor de ${hev.length} acção(ões) com local</span><span class="hx-ramp"><i></i>menos — mais</span>`;
+  if(ht==='falta') return `<span>Legenda:</span><span><i style="background:#FACC15"></i>Cometidas (${n(e=>e.type==='fc')})</span><span><i style="background:#4CC3FF"></i>Sofridas (${n(e=>e.type==='fs')})</span>`;
+  if(ht==='shot') return `<span>Legenda:</span><span><i style="background:#4ADE80"></i>Golo (${n(e=>e.type==='golo')})</span><span><i style="background:#4CC3FF"></i>À baliza (${n(e=>e.sub==='baliza')})</span><span><i style="background:#fff"></i>Fora (${n(e=>e.sub==='fora')})</span><span><i style="background:#FFA24C"></i>Interceptado (${n(e=>e.sub==='interc')})</span>`;
+  return `<span>Legenda:</span><span><i style="background:${ht==='rec'?'#4ADE80':'#F87171'}"></i>${ht==='rec'?'Recuperações':'Perdas'} (${hev.length})</span>`;
+}
+function ihCross(evs){
+  const t=Math.max(1,evs.length), pc=f=>(evs.filter(f).length/t*100).toFixed(1).replace('.',',');
+  const v={top:pc(e=>e.z==='ofen'),bot:pc(e=>e.z==='def'),left:pc(e=>e.y<100/3),right:pc(e=>e.y>200/3)};
+  return `<div class="ih-x"><svg viewBox="0 0 200 150" aria-hidden="true"><line x1="10" y1="8" x2="190" y2="142"/><line x1="190" y1="8" x2="10" y2="142"/><circle cx="100" cy="75" r="6"/></svg>
+    <div class="t"><span>Z. ofensiva</span><b>${evs.length?v.top:'—'}</b></div><div class="b"><b>${evs.length?v.bot:'—'}</b><span>Z. defensiva</span></div>
+    <div class="l"><span>Esquerda</span><b>${evs.length?v.left:'—'}</b></div><div class="r"><span>Direita</span><b>${evs.length?v.right:'—'}</b></div></div>`;
+}
 const HEAT_T=[['all','Todas'],['rec','Recuperações'],['perda','Perdas'],['pe','Passes errados'],['falta','Faltas'],['shot','Remates']];
 function vJogador(){
   const p=S.players.find(x=>x.id===S.playerId), ed=canEdit(), E=ed&&S.fichaEdit;
@@ -864,26 +897,49 @@ function vJogador(){
   const nMatches=seasonMatches().length, L2=2*(S.team.half_len||45);
   const rg=(v,max,l,col)=>{ const r=24,c=2*Math.PI*r,f=Math.max(0,Math.min(1,max?(+String(v).replace(',','.')||0)/max:0)); return `<div class="pv-ring"><svg viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="${r}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="29" cy="29" r="${r}" fill="none" stroke="${col||'var(--lv-us)'}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(c*f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 29 29)"/></svg><b class="num">${v}</b><span>${l}</span></div>`; };
   const posTabs=[['','Todos'],['GR','Guarda-redes'],['DEF','Defesas'],['MED','Médios'],['AV','Avançados']];
-  return `<div class="view pfx pv">
-  <div class="pv-head"><div><div class="pv-eye">Análise individual · ${esc(S.team.name)}</div><h1>Ficha do jogador</h1></div>
-    <div class="pv-tools"><div class="seg" role="group" aria-label="Filtrar posição">${posTabs.map(([k,l])=>`<button aria-pressed="${posF===k}" data-pfpos="${k}">${l}</button>`).join('')}</div>${ed?'<a class="btn pri" href="#plantel">+ Novo jogador</a>':''}</div></div>
-  <div class="pv-sub"><a class="hx-back" href="#plantel">← Plantel</a><span class="muted">${esc(S.club.name)} · ${esc(S.team.name)}</span><span class="sp"></span>${scopeBarAuto()}${ed&&!E?`<button class="btn" data-fichaedit>Editar ficha</button>`:''}</div>
-  <section class="card pv-hero" data-n="${esc(p.num||'')}">
-    <div class="pv-l">
-      <div class="pv-id">
-        <div class="pv-ph">${photo?`<img src="${esc(photo)}" alt="Fotografia de ${esc(p.name)}">`:`<span>${esc(initials(p.name))}</span>`}
-          ${ed?`<label class="pv-upl">${photo?'Mudar fotografia':'Inserir fotografia'}<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}
-          ${ed&&photo?`<button class="linkbtn pv-rm" data-delphoto="${p.id}">Remover</button>`:''}</div>
-        <div class="pv-num">${esc(p.num||'')}</div>
-        <div class="pv-nm"><div class="pv-name">${first?`<span>${esc(first)}</span>`:''}<b>${esc(last)}</b></div>${(p.pos2||POS_L[p.pos||''])&&(p.pos2||POS_L[p.pos||''])!=='—'?`<span class="pv-pos">${esc(p.pos2||POS_L[p.pos||''])}</span>`:''} ${statusPill(p)}</div>
+  return `<div class="view pfx pv ihv">
+  <div class="ih-top"><a class="ih-back" href="#plantel">‹ Plantel</a><span class="ih-crumb"><b>${esc(p.full_name||p.name)}</b> / Estatísticas</span><span class="sp"></span>${scopeBarAuto()}${ed&&!E?`<button class="btn" data-fichaedit>Editar ficha</button>`:''}${ed?'<a class="btn pri ih-new" href="#plantel">+ Novo jogador</a>':''}</div>
+  <section class="ih" data-n="${esc(p.num||'')}">
+    <div class="ih-head">
+      <div class="ih-id">
+        <div class="ih-num">${esc(p.num||'')}</div>
+        <div class="ih-name">${first?`<span>${esc(first)}</span>`:''}<b>${esc(last)}</b></div>
+        <div class="ih-st">${statusPill(p)}</div>
       </div>
-      <div class="pv-meta">${[p.nationality?`Nacionalidade: ${esc(p.nationality)}`:'',age!=null?`Idade: ${age}`:'',p.height_cm?`Altura: ${p.height_cm} cm`:''].filter(Boolean).join(' · ')}${(p.foot||p.joined)?`<br>${[p.foot?`Pé preferido: ${esc(p.foot)}`:'',p.joined?`No clube desde ${esc(String(p.joined).slice(0,4))}`:''].filter(Boolean).join(' · ')}`:''}</div>
-      <div class="pv-rings">${rg(pl.length,nMatches||1,'Jogos')}${rg(pl.filter(g=>g.started).length,pl.length||1,'Titular')}${rg(mins,(nMatches||1)*L2,'Minutos')}${rg(sum('golos'),Math.max(5,sum('golos')),'Golos')}${rg(avgR!=null?f1r(avgR):'—',10,'Nota','var(--good)')}${rg(sum('am'),5,'Amarelos','var(--gold)')}${rg(sum('vm'),1,'Vermelhos','var(--bad)')}</div>
+      <div class="ih-photo">${photo?`<img src="${esc(photo)}" alt="Fotografia de ${esc(p.name)}">`:`<div class="ih-sil"><svg viewBox="0 0 120 140" aria-hidden="true"><circle cx="60" cy="38" r="24"/><path d="M14 140c2-40 20-62 46-62s44 22 46 62z"/></svg><b>${esc(p.num||'')}</b></div>`}
+        ${ed?`<div class="ih-upl"><label class="pv-upl">${photo?'Mudar fotografia':'Inserir fotografia'}<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>${photo?`<button class="linkbtn pv-rm" data-delphoto="${p.id}">Remover</button>`:''}</div>`:''}</div>
+      <div class="ih-info"><div class="ih-pos">${esc(mainPos(p)||POS_L[p.pos||'']||'Jogador')}</div>
+        ${p.nationality?`<div>Nacionalidade: ${esc(p.nationality)}</div>`:''}${p.birth_date?`<div>Nascido a ${esc(fmtDate(p.birth_date))}${age!=null?` (${age})`:''}</div>`:''}${p.height_cm?`<div>Altura: ${p.height_cm} cm</div>`:''}${p.foot?`<div>Pé ${esc(p.foot.toLowerCase())}</div>`:''}
+        <div class="ih-club">${clubLogo('md')}</div></div>
+      <div class="ih-stats">
+        <div class="ih-rings">${rg(pl.length,nMatches||1,'Jogos')}${rg(pl.filter(g=>g.started).length,pl.length||1,'Titular')}${rg(mins,(nMatches||1)*L2,'Minutos')}${rg(sum('golos'),Math.max(5,sum('golos')),'Golos')}${rg(avgR!=null?f1r(avgR):'—',10,'Nota','var(--good)')}
+          <div class="ih-card y"><b>${sum('am')}</b><span>Amarelos</span></div><div class="ih-card r"><b>${sum('vm')}</b><span>Vermelhos</span></div></div>
+        <div class="ih-charts">
+          <div class="ih-ch"><h4>Perfil de jogo</h4>${axes?radarPv(axes):'<p class="muted">Sem jogos neste período.</p>'}</div>
+          <div class="ih-ch"><h4>Detalhe dos remates</h4>${ihPie(shots)}</div>
+        </div>
+      </div>
     </div>
-    <div class="pv-r"><div class="lv-h"><h2>Perfil técnico</h2><span class="muted">${ov!=null?`Avaliação geral <b>${f1(ov)}</b> · `:''}vs média da equipa</span></div>
-      ${axes?radarPv(axes):'<p class="muted">Sem jogos neste período.</p>'}</div>
+    <div class="ih-body">
+      <div class="ih-pitch">
+        <div class="ih-tabs" role="group" aria-label="Mapa">${[['all','Posição'],['rec','Recuperações'],['perda','Perdas'],['falta','Faltas'],['shot','Remates']].map(([k,l])=>`<button data-heatt="${k}" aria-pressed="${ht===k}">${l}</button>`).join('')}</div>
+        <div class="ih-pw">${ihMap(ht,hev)}</div>
+        <div class="ih-leg">${ihLegend(ht,hev)}</div>
+      </div>
+      <div class="ih-right">
+        <div class="ih-bars">${[['Recuperações por jogo','rec'],['Perdas por jogo','perda'],['Remates por jogo','shot']].map(([l,k])=>{ const v=pg(k), t=tg(k), top=mx(k), m=Math.max(0.5,v,t,top); return `<div class="ih-br"><span class="l">${l}</span><span class="t"><i style="width:${Math.min(100,v/m*100)}%"><em>${f1(v)}</em></i><u style="left:${Math.min(100,t/m*100)}%">MÉDIA ${f1(t)}</u></span><span class="r">TOP ${f1(top)}</span></div>`; }).join('')}</div>
+        <div class="ih-low">
+          <div class="ih-cross"><h4>% acções por zona</h4>${ihCross(evAll)}</div>
+          <div class="ih-games"><h4>Melhores jogos</h4><div class="ih-av">${[...pl].filter(g=>g.r!=null).sort((a,b)=>b.r-a.r).slice(0,3).map(g=>`<div>${oppLogo(g.m.opp,'md')}<small>${esc(short(g.m.opp))}</small><b>${f1r(g.r)}</b></div>`).join('')||'<span class="muted">—</span>'}</div>
+            <h4>Últimos jogos</h4><div class="ih-av">${[...pl].reverse().slice(0,3).map(g=>`<div>${oppLogo(g.m.opp,'md')}<small>${esc(fmtDate(g.m.date).slice(0,5))}</small><b>${g.r!=null?f1r(g.r):'—'}</b></div>`).join('')||'<span class="muted">—</span>'}</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="ih-foot">
+      <div class="ih-ftabs" role="group" aria-label="Filtrar posição">${[['','Todos'],['GR','Guarda-redes'],['DEF','Defesas'],['MED','Médios'],['AV','Avançados']].map(([k,l])=>`<button aria-pressed="${posF===k}" data-pfpos="${k}">${l}</button>`).join('')}</div>
+      <div class="ih-strip">${strip.map(x=>`<button class="${x.id===p.id?'on':''}" data-ficha="${x.id}" aria-pressed="${x.id===p.id}" title="${esc(x.name)}">${S.photos&&S.photos[x.id]?`<img src="${esc(S.photos[x.id])}" alt="">`:`<span>${esc(x.num||initials(x.name))}</span>`}<em>${esc(x.num?x.num+' ':'')}${esc(x.name.split(' ').slice(-1)[0])}</em></button>`).join('')||'<span class="muted">Sem jogadores nesta posição.</span>'}</div>
+    </div>
   </section>
-  <div class="pv-strip">${strip.map(x=>`<button class="${x.id===p.id?'on':''}" data-ficha="${x.id}" aria-pressed="${x.id===p.id}"><span class="av2">${S.photos&&S.photos[x.id]?`<img src="${esc(S.photos[x.id])}" alt="">`:esc(x.num||initials(x.name))}</span><b>${esc(x.name.split(' ').slice(-1)[0])}</b><small>${esc(x.pos||'—')}</small></button>`).join('')||'<span class="muted">Sem jogadores nesta posição.</span>'}</div>
   ${vPerfilPro(p,pl,mins,sum,avgR,E)}
   ${E?`<section class="card"><h2>Editar ficha</h2><form id="fichaForm" class="formrow">
     <label class="fl">Nome desportivo${inp('name','text','required')}</label>
@@ -909,27 +965,6 @@ function vJogador(){
   </form></section>`:''}
   ${p.status&&p.status!=='disponivel'&&p.status_note?`<div class="banner">${esc(STATUS[p.status][0])}: ${esc(p.status_note)}</div>`:''}
   ${vFichaCompleta(p,ed)}
-  <div class="pv-maps">
-    <section class="card"><div class="lv-h"><h2>Mapa de remates</h2><span class="muted">${shots.length} remate(s) · ${golos} golo(s)</span></div>
-      <div class="pv-pitch">${shotMap}</div>
-      <div class="legend"><span><i style="background:var(--good)"></i>Golo</span><span><i style="background:var(--lv-us)"></i>À baliza</span><span><i style="background:var(--lv-opp)"></i>Fora / interceptado</span></div></section>
-    <section class="card"><div class="lv-h"><h2>Mapa de calor</h2><span class="muted">${hev.length} ação(ões) · ataque para a direita</span></div>
-      <div class="hx-tabs pv-tabs">${HEAT_T.map(([k,l])=>`<button class="${ht===k?'on':''}" data-heatt="${k}">${l}</button>`).join('')}</div>
-      <div class="pv-pitch">${pitchSVG({heat:hev,labels:false})}</div>
-      <div class="pv-zones">${[['def','Z. Defensiva'],['inter','Z. Intermédia'],['ofen','Z. Ofensiva']].map(([k,l])=>`<div><b>${Math.round(zc[k]/zt*100)}%</b><span>${l}</span></div>`).join('')}</div></section>
-  </div>
-  <section class="hx hx-b pv-perf">
-    <div>
-      <div class="hx-right">
-        <div class="hx-h">Por jogo · jogador vs média da equipa</div>
-        ${(()=>{ const rows=[['Recuperações','rec'],['Perdas','perda'],['Passes errados','pe'],['Remates','shot'],['Faltas cometidas','fc'],['Faltas sofridas','fs']]; return rows.map(([l,k])=>{ const v=pg(k), t=tg(k), m=Math.max(0.5,v,t,mx(k)); return bar(l,v,t,m,f1(v)); }).join(''); })()}
-        <div class="hx-note">A marca branca indica a média da equipa.</div>
-        <div class="hx-h" style="margin-top:14px">Avaliação técnica do treinador</div>
-        <div class="hx-attrs">${groups.map(([g,list])=>{ const vs=list.map(([k])=>+A[k]||0).filter(Boolean), av=vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null; return `<div class="hx-ag"><b>${av!=null?f1(av):'—'}</b><span>${g}</span><div>${list.map(([k,l])=>{ const v=+A[k]||0; return `<div class="hx-ar"><span>${l}</span><i style="--w:${v*10}%"></i><em>${v||'—'}</em></div>`; }).join('')}</div></div>`; }).join('')}</div>
-        ${!Object.values(A).some(Number)?`<div class="hx-note">${ed?'Ainda sem avaliação. Use "Editar ficha" para atribuir de 1 a 10.':'Ainda sem avaliação do treinador.'}</div>`:''}
-      </div>
-    </div>
-  </section>
   <section class="card"><h2>Evolução da nota</h2>${ratingLine(games)}</section>
   <div>
 
