@@ -733,7 +733,7 @@ function ring(pct,{size=130,stroke=10,from='#38BDF8',to='#8B5CF6',inner='',sub='
   return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${Math.round(pct*100)}%"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs>
     <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="${stroke}"/>
     <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="url(#${id})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${size/2} ${size/2})" class="glow"/>
-    ${inner?`<text x="50%" y="${sub?'48%':'54%'}" text-anchor="middle" font-size="${size*.2}" font-weight="700" fill="#fff">${inner}</text>`:''}${sub?`<text x="50%" y="64%" text-anchor="middle" font-size="${size*.09}" fill="var(--muted)">${sub}</text>`:''}</svg>`;
+    ${inner?`<text x="50%" y="${sub?'48%':'54%'}" text-anchor="middle" font-size="${size*.2}" font-weight="700" fill="var(--ink)">${inner}</text>`:''}${sub?`<text x="50%" y="64%" text-anchor="middle" font-size="${size*.09}" fill="var(--muted)">${sub}</text>`:''}</svg>`;
 }
 function wave(vals,{W=420,H=110,color='#3B82F6',dots=true,min=null,max=null}={}){
   if(vals.length<2) vals=vals.length?[vals[0],vals[0]]:[5,5];
