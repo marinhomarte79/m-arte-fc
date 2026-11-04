@@ -652,6 +652,17 @@ function radarDark(axes){
     <polygon points="${me}" fill="rgba(120,200,255,.28)" stroke="#9fd8ff" stroke-width="2"/>
     ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x}" cy="${y}" r="3.4" fill="#fff"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>`;
 }
+function radarPv(axes){
+  const W=300,H=270,cx=150,cy=135,R=92,n=axes.length, ang=i=>-Math.PI/2+i*2*Math.PI/n, P=(i,v)=>[cx+Math.cos(ang(i))*R*v, cy+Math.sin(ang(i))*R*v];
+  let g=''; for(const k of [0.25,0.5,0.75,1]) g+=`<polygon points="${axes.map((_,i)=>P(i,k).join(',')).join(' ')}" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
+  axes.forEach((a,i)=>{ const [x,y]=P(i,1); g+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,.1)"/>`; const [lx,ly]=P(i,1.18); g+=`<text x="${lx.toFixed(1)}" y="${(ly+(ly<cy-10?-2:ly>cy+10?10:4)).toFixed(1)}" font-size="10.5" font-weight="700" letter-spacing=".6" text-anchor="${Math.abs(lx-cx)<8?'middle':lx>cx?'start':'end'}" fill="var(--muted)">${a.l.toUpperCase()}</text>`; });
+  const team=axes.map((a,i)=>P(i,a.t).join(',')).join(' '), me=axes.map((a,i)=>P(i,a.v).join(',')).join(' ');
+  return `<svg viewBox="-80 -8 460 290" class="pv-radar" role="img" aria-label="Perfil técnico do jogador comparado com a média da equipa">${g}
+    <polygon points="${team}" fill="none" stroke="rgba(255,162,76,.75)" stroke-width="1.3" stroke-dasharray="4 3"/>
+    <polygon points="${me}" fill="rgba(76,195,255,.22)" stroke="var(--lv-us)" stroke-width="2"/>
+    ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="var(--lv-us)"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>
+    <div class="legend" style="justify-content:center"><span><i style="background:var(--lv-us)"></i>Jogador</span><span><i style="background:var(--lv-opp)"></i>Média da equipa</span></div>`;
+}
 const HEAT_T=[['all','Todas'],['rec','Recuperações'],['perda','Perdas'],['pe','Passes errados'],['falta','Faltas'],['shot','Remates']];
 function vJogador(){
   const p=S.players.find(x=>x.id===S.playerId), ed=canEdit(), E=ed&&S.fichaEdit;
@@ -677,26 +688,32 @@ function vJogador(){
   const pg=k=>pl.length?sum(k)/pl.length:0, tg=k=>avgT(k);
   // carousel
   const posF=S.pfPos||'', strip=players().filter(x=>!posF||x.pos===posF).sort((a,b)=>({GR:0,DEF:1,MED:2,AV:3}[a.pos]??4)-({GR:0,DEF:1,MED:2,AV:3}[b.pos]??4)||(+a.num||99)-(+b.num||99));
-  return `<div class="view pfx">
-  <section class="hx">
-    <div class="hx-top"><a class="hx-back" href="#plantel">← Plantel</a><span class="hx-crumb">${esc(S.club.name)} · ${esc(S.team.name)}</span><span class="sp"></span>${scopeBarAuto()}${ed&&!E?`<button class="btn pri" data-fichaedit>Editar ficha</button>`:''}</div>
-    <div class="hx-grid">
-      <div class="hx-id">
-        <div class="hx-num">${esc(p.num||'')}</div>
-        <div class="hx-name">${first?`<span>${esc(first)}</span>`:''}<b>${esc(last)}</b></div>
-        <div class="hx-pos">${esc(p.pos2||POS_L[p.pos||''])}</div>
-        <div class="hx-meta">${p.nationality?`Nacionalidade: ${esc(p.nationality)}<br>`:''}${p.birth_date?`Nascido a ${esc(fmtDate(p.birth_date))}${age!=null?` (${age} anos)`:''}<br>`:''}${p.height_cm?`Altura: ${p.height_cm} cm`:''}${p.foot?` · Pé ${esc(p.foot.toLowerCase())}`:''}</div>
-        <div class="hx-status">${statusPill(p)}</div>
+  const shots=evAll.filter(isShot), golos=shots.filter(e=>e.type==='golo').length;
+  const smk=shots.map(e=>({x:e.x,y:e.y,r:1.7,c:e.type==='golo'?'var(--good)':e.sub==='baliza'?'var(--lv-us)':'var(--lv-opp)',t:(e.type==='golo'?'Golo':lab(SHOT,e.sub)||'Remate')}));
+  const shotMap=pitchSVG({markers:smk,labels:false}).replace('viewBox="-2 -2 109 72"','viewBox="50 -2 57 72"');
+  const nMatches=seasonMatches().length, L2=2*(S.team.half_len||45);
+  const rg=(v,max,l,col)=>{ const r=24,c=2*Math.PI*r,f=Math.max(0,Math.min(1,max?(+String(v).replace(',','.')||0)/max:0)); return `<div class="pv-ring"><svg viewBox="0 0 58 58" aria-hidden="true"><circle cx="29" cy="29" r="${r}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/><circle cx="29" cy="29" r="${r}" fill="none" stroke="${col||'var(--lv-us)'}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(c*f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 29 29)"/></svg><b class="num">${v}</b><span>${l}</span></div>`; };
+  const posTabs=[['','Todos'],['GR','Guarda-redes'],['DEF','Defesas'],['MED','Médios'],['AV','Avançados']];
+  return `<div class="view pfx pv">
+  <div class="pv-head"><div><div class="pv-eye">Análise individual · ${esc(S.team.name)}</div><h1>Ficha do jogador</h1></div>
+    <div class="pv-tools"><div class="seg" role="group" aria-label="Filtrar posição">${posTabs.map(([k,l])=>`<button aria-pressed="${posF===k}" data-pfpos="${k}">${l}</button>`).join('')}</div>${ed?'<a class="btn pri" href="#plantel">+ Novo jogador</a>':''}</div></div>
+  <div class="pv-sub"><a class="hx-back" href="#plantel">← Plantel</a><span class="muted">${esc(S.club.name)} · ${esc(S.team.name)}</span><span class="sp"></span>${scopeBarAuto()}${ed&&!E?`<button class="btn" data-fichaedit>Editar ficha</button>`:''}</div>
+  <section class="card pv-hero" data-n="${esc(p.num||'')}">
+    <div class="pv-l">
+      <div class="pv-id">
+        <div class="pv-ph">${photo?`<img src="${esc(photo)}" alt="Fotografia de ${esc(p.name)}">`:`<span>${esc(initials(p.name))}</span>`}
+          ${ed?`<label class="pv-upl">${photo?'Mudar fotografia':'Inserir fotografia'}<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}
+          ${ed&&photo?`<button class="linkbtn pv-rm" data-delphoto="${p.id}">Remover</button>`:''}</div>
+        <div class="pv-num">${esc(p.num||'')}</div>
+        <div class="pv-nm"><div class="pv-name">${first?`<span>${esc(first)}</span>`:''}<b>${esc(last)}</b></div>${(p.pos2||POS_L[p.pos||''])&&(p.pos2||POS_L[p.pos||''])!=='—'?`<span class="pv-pos">${esc(p.pos2||POS_L[p.pos||''])}</span>`:''} ${statusPill(p)}</div>
       </div>
-      <div class="hx-photo">${photo?`<img src="${esc(photo)}" alt="${esc(p.name)}">`:`<div class="hx-ph">${esc(p.num||initials(p.name))}</div>`}
-        ${E?`<label class="btn sm hx-upl">Mudar foto<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}</div>
-      <div class="hx-stats">
-        <div class="hx-circles">${circ(pl.length,'Jogos')}${circ(pl.filter(g=>g.started).length,'Titular')}${circ(mins,'Minutos')}${circ(sum('golos'),'Golos')}${circ(avgR!=null?f1r(avgR):'—','Nota','hx-rt '+(avgR!=null?rtCls(avgR):''))}${circ(sum('am'),'Amarelos','hx-y')}${circ(sum('vm'),'Vermelhos','hx-r')}</div>
-        <div class="hx-sub"><span>Perfil de jogo</span>${ov!=null?`<span class="hx-ov">Avaliação geral <b>${f1(ov)}</b></span>`:''}</div>
-        ${axes?radarDark(axes):'<p class="hx-empty">Sem jogos neste período.</p>'}
-      </div>
+      <div class="pv-meta">${[p.nationality?`Nacionalidade: ${esc(p.nationality)}`:'',age!=null?`Idade: ${age}`:'',p.height_cm?`Altura: ${p.height_cm} cm`:''].filter(Boolean).join(' · ')}${(p.foot||p.joined)?`<br>${[p.foot?`Pé preferido: ${esc(p.foot)}`:'',p.joined?`No clube desde ${esc(String(p.joined).slice(0,4))}`:''].filter(Boolean).join(' · ')}`:''}</div>
+      <div class="pv-rings">${rg(pl.length,nMatches||1,'Jogos')}${rg(pl.filter(g=>g.started).length,pl.length||1,'Titular')}${rg(mins,(nMatches||1)*L2,'Minutos')}${rg(sum('golos'),Math.max(5,sum('golos')),'Golos')}${rg(avgR!=null?f1r(avgR):'—',10,'Nota','var(--good)')}${rg(sum('am'),5,'Amarelos','var(--gold)')}${rg(sum('vm'),1,'Vermelhos','var(--bad)')}</div>
     </div>
+    <div class="pv-r"><div class="lv-h"><h2>Perfil técnico</h2><span class="muted">${ov!=null?`Avaliação geral <b>${f1(ov)}</b> · `:''}vs média da equipa</span></div>
+      ${axes?radarPv(axes):'<p class="muted">Sem jogos neste período.</p>'}</div>
   </section>
+  <div class="pv-strip">${strip.map(x=>`<button class="${x.id===p.id?'on':''}" data-ficha="${x.id}" aria-pressed="${x.id===p.id}"><span class="av2">${S.photos&&S.photos[x.id]?`<img src="${esc(S.photos[x.id])}" alt="">`:esc(x.num||initials(x.name))}</span><b>${esc(x.name.split(' ').slice(-1)[0])}</b><small>${esc(x.pos||'—')}</small></button>`).join('')||'<span class="muted">Sem jogadores nesta posição.</span>'}</div>
   ${E?`<section class="card"><h2>Editar ficha</h2><form id="fichaForm" class="formrow">
     <label class="fl">Nome desportivo${inp('name','text','required')}</label>
     <label class="fl">Nome completo${inp('full_name')}</label>
@@ -718,14 +735,17 @@ function vJogador(){
     <div class="row" style="grid-column:1/-1"><button class="btn pri" type="submit">Gravar ficha</button><button class="btn" type="button" data-fichacancel>Cancelar</button></div>
   </form></section>`:''}
   ${p.status&&p.status!=='disponivel'&&p.status_note?`<div class="banner">${esc(STATUS[p.status][0])}: ${esc(p.status_note)}</div>`:''}
-  <section class="hx hx-b">
-    <div class="hx-grid2">
-      <div class="hx-map">
-        <div class="hx-tabs">${HEAT_T.map(([k,l])=>`<button class="${ht===k?'on':''}" data-heatt="${k}">${l}</button>`).join('')}</div>
-        <div class="hx-pitch">${pitchSVG({heat:hev,labels:true})}</div>
-        <div class="hx-legend"><span>Mapa de calor · ${hev.length} acção(ões) com localização</span><span class="hx-ramp"><i></i>menos — mais</span></div>
-        <div class="hx-zones">${[['def','Z. Defensiva'],['inter','Z. Intermédia'],['ofen','Z. Ofensiva']].map(([k,l])=>`<div><b>${Math.round(zc[k]/zt*100)}%</b><span>${l}</span></div>`).join('')}</div>
-      </div>
+  <div class="pv-maps">
+    <section class="card"><div class="lv-h"><h2>Mapa de remates</h2><span class="muted">${shots.length} remate(s) · ${golos} golo(s)</span></div>
+      <div class="pv-pitch">${shotMap}</div>
+      <div class="legend"><span><i style="background:var(--good)"></i>Golo</span><span><i style="background:var(--lv-us)"></i>À baliza</span><span><i style="background:var(--lv-opp)"></i>Fora / interceptado</span></div></section>
+    <section class="card"><div class="lv-h"><h2>Mapa de calor</h2><span class="muted">${hev.length} ação(ões) · ataque para a direita</span></div>
+      <div class="hx-tabs pv-tabs">${HEAT_T.map(([k,l])=>`<button class="${ht===k?'on':''}" data-heatt="${k}">${l}</button>`).join('')}</div>
+      <div class="pv-pitch">${pitchSVG({heat:hev,labels:false})}</div>
+      <div class="pv-zones">${[['def','Z. Defensiva'],['inter','Z. Intermédia'],['ofen','Z. Ofensiva']].map(([k,l])=>`<div><b>${Math.round(zc[k]/zt*100)}%</b><span>${l}</span></div>`).join('')}</div></section>
+  </div>
+  <section class="hx hx-b pv-perf">
+    <div>
       <div class="hx-right">
         <div class="hx-h">Por jogo · jogador vs média da equipa</div>
         ${(()=>{ const rows=[['Recuperações','rec'],['Perdas','perda'],['Passes errados','pe'],['Remates','shot'],['Faltas cometidas','fc'],['Faltas sofridas','fs']]; return rows.map(([l,k])=>{ const v=pg(k), t=tg(k), m=Math.max(0.5,v,t,mx(k)); return bar(l,v,t,m,f1(v)); }).join(''); })()}
@@ -745,10 +765,6 @@ function vJogador(){
     ${[...games].reverse().map(g=>g.played?`<tr><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>${g.started?'Titular':g.sub?'Suplente':'—'}</td><td>${g.min??'—'}</td><td>${g.r!=null?`<span class="rt ${rtCls(g.r)}">${f1r(g.r)}</span>`:'—'}</td><td>${g.rec}</td><td>${g.perda}</td><td>${g.pe}</td><td>${g.shots}</td><td>${g.golos||''}</td><td>${g.am?'🟨'.repeat(g.am):''}${g.vm?'🟥':''}</td></tr>`:`<tr class="muted"><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>Banco (não utilizado)</td><td colspan="8"></td></tr>`).join('')||'<tr><td class="l muted" colspan="11">Sem jogos neste período.</td></tr>'}
   </tbody></table></div></section>
   ${p.notes?`<section class="card"><h2>Observações e plano de desenvolvimento</h2><p style="white-space:pre-wrap;margin:0;max-width:80ch">${esc(p.notes)}</p></section>`:''}
-  <section class="hx hx-strip">
-    <div class="hx-stabs">${[['','Todos'],['GR','Guarda-redes'],['DEF','Defesas'],['MED','Médios'],['AV','Avançados']].map(([k,l])=>`<button class="${posF===k?'on':''}" data-pfpos="${k}">${l}</button>`).join('')}</div>
-    <div class="hx-rail">${strip.map(x=>`<button class="hx-th ${x.id===p.id?'on':''}" data-ficha="${x.id}">${S.photos&&S.photos[x.id]?`<img src="${esc(S.photos[x.id])}" alt="">`:`<span>${esc(x.num||initials(x.name))}</span>`}<em>${esc(x.num?x.num+' ':'')}${esc(x.name)}</em></button>`).join('')||'<span class="hx-empty">Sem jogadores nesta posição.</span>'}</div>
-  </section>
   </div>`;
 }
 async function resizeImage(file){
@@ -1351,6 +1367,11 @@ document.addEventListener('click', async ev=>{
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
   else if(d.pfpos!==undefined){ S.pfPos=d.pfpos; render(); }
+  else if(d.delphoto){ const p=S.players.find(x=>x.id===d.delphoto); if(!p||!canEdit()) return;
+    if(S.confirm!=='photo'+p.id){ S.confirm='photo'+p.id; t.textContent='Confirmar remoção?'; setTimeout(()=>{ if(S.confirm==='photo'+p.id){ S.confirm=null; render(); } },3500); return; }
+    S.confirm=null; const path=p.photo_path; const { error }=await sb.from('players').update({photo_path:null}).eq('id',p.id);
+    if(error){ toast('Não foi possível remover a fotografia: '+error.message); return; }
+    if(path) await sb.storage.from('player-photos').remove([path]); p.photo_path=null; delete S.photos[p.id]; toast('Fotografia removida.'); render(); }
   else if(d.scope){ S.scope=d.scope; render(); }
   else if(d.range){ S.range=d.range; render(); }
   else if(d.sorts){ S.sortS=S.sortS.k===d.sorts?{k:d.sorts,d:-S.sortS.d}:{k:d.sorts,d:d.sorts==='name'?1:-1}; render(); }
@@ -1468,8 +1489,8 @@ document.addEventListener('change', async ev=>{
     try{ const blob=await resizeImage(el.files[0]); const path=`${S.club.id}/${p.id}.jpg`;
       const { error }=await sb.storage.from('player-photos').upload(path,blob,{upsert:true,contentType:'image/jpeg'}); if(error) throw error;
       await sb.from('players').update({photo_path:path}).eq('id',p.id); p.photo_path=path;
-      const { data }=await sb.storage.from('player-photos').createSignedUrl(path,3600); S.photos[p.id]=data.signedUrl+'&t='+Date.now(); toast('Foto gravada.'); render();
-    }catch(e){ toast('Não foi possível carregar a foto: '+(e.message||e)); }
+      const { data }=await sb.storage.from('player-photos').createSignedUrl(path,3600); S.photos[p.id]=data.signedUrl+'&t='+Date.now(); toast('Fotografia gravada.'); render();
+    }catch(e){ toast('Não foi possível gravar a fotografia: '+(e.message||e)+'. Tente uma imagem JPG ou PNG.'); }
     return; }
   if(el.id==='cuForm'){ const nT=Object.values(S.callup||{}).filter(v=>v==='T').length, n=Math.min(MAX_TIT,formSize(el.value));
     if(nT>n){ toast(`A formação ${el.value} só tem ${n} lugares e já há ${nT} titulares. Retire ${nT-n} titular(es) primeiro.`); el.value=S.cuForm; return; }
