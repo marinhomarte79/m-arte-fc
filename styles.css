@@ -905,3 +905,61 @@ main.gut{min-width:0;width:100%}
 .lg-row>.row{margin-left:auto;gap:6px}
 .lg-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
 @media (max-width:420px){.lg-list{grid-template-columns:minmax(0,1fr)}}
+
+/* ---- perfil profissional do jogador ---- */
+.pp-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);gap:18px;align-items:start}
+.pp-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pp-sec h3{font-family:var(--lv-cond);font-size:15px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--lv-us);margin:0 0 8px}
+.pp-pitch svg{width:100%;height:auto;display:block}
+.pp-pos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pp-chip{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;border:1px solid rgba(76,195,255,.4);color:var(--ink)}
+.pp-chip.on{background:var(--lv-us);border-color:var(--lv-us);color:#04202D}
+.pp-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pp-facts div,.pp-t{background:rgba(255,255,255,.04);border:var(--glass-b);border-radius:10px;padding:8px 10px;min-width:0}
+.pp-facts span,.pp-t span{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.pp-facts b{font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pp-t b{display:block;font-family:var(--lv-cond);font-size:26px;line-height:1.05;font-weight:700}
+.pp-bar{display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr) 22px;gap:10px;align-items:center;font-size:13px;margin-bottom:7px}
+.pp-bar i{height:7px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden}
+.pp-bar em{display:block;height:100%;background:linear-gradient(90deg,var(--lv-us),#8B5CF6);border-radius:4px}
+.pp-bar b{text-align:right}
+.pp-bio{margin:0;font-size:14.5px;line-height:1.6;max-width:70ch}
+.pp-car tr.cur td{background:rgba(76,195,255,.08)}
+.pp-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pp-ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.pp-ul li{padding-left:18px;position:relative;font-size:13.5px}
+.pp-ul li::before{content:"";position:absolute;left:2px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pp-ul.good li::before{background:var(--good)}.pp-ul.warn li::before{background:var(--warn)}.pp-ul.gold li::before{background:var(--gold);border-radius:2px;transform:rotate(45deg)}
+.pp-vid{display:flex;flex-wrap:wrap;gap:8px}
+.pp-vid a{display:flex;flex-direction:column;padding:8px 12px;border-radius:10px;border:var(--glass-b);background:rgba(255,255,255,.04);color:var(--ink);text-decoration:none;font-weight:700;font-size:13px}
+.pp-vid a small{font-weight:500;color:var(--muted);font-size:11px}
+.pp-vid a:hover{border-color:var(--lv-us)}
+.pp-chk{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-weight:500}
+.pp-chk label{display:flex;align-items:center;gap:6px;font-size:13px}
+.pp-cr{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.pp-crr{display:grid;grid-template-columns:110px minmax(0,1.4fr) minmax(0,1fr) 72px 72px 36px;gap:6px}
+@media (max-width:1000px){.pp-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.pp-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.pp-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.pp-two{grid-template-columns:1fr}
+  .pp-crr{grid-template-columns:1fr 1fr 36px}.pp-crr [data-cr="esc"],.pp-crr [data-cr="j"],.pp-crr [data-cr="g"]{grid-column:auto}}
+@media print{
+  body.print-perfil *{color:#111!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important}
+  body.print-perfil .side,body.print-perfil #hdr,body.print-perfil .toast,body.print-perfil .pv-head,body.print-perfil .pv-sub,body.print-perfil .pv-strip,body.print-perfil .no-print,body.print-perfil .pv-upl,body.print-perfil .pv-rm,body.print-perfil .pv-hero::after,body.print-perfil .pv-maps,body.print-perfil .pv-perf,body.print-perfil .banner{display:none!important}
+  body.print-perfil .pfx>section:not(.pv-hero):not(.pp){display:none!important}
+  body.print-perfil .card,body.print-perfil .pp-facts div,body.print-perfil .pp-t{border:1px solid #bbb!important;break-inside:avoid}
+  body.print-perfil .pv-hero{grid-template-columns:1fr 1fr}
+  body.print-perfil .pp-grid{grid-template-columns:.9fr 1.3fr}
+  body.print-perfil .pv-num,body.print-perfil .pp-sec h3{color:#0b4f8a!important}
+  body.print-perfil .pp-chip.on{background:#0b4f8a!important;color:#fff!important}
+  body.print-perfil .pp-bar em{background:#0b4f8a!important}
+  body.print-perfil .pp-pitch svg *{color:initial!important}
+}
+@media print{
+  body.print-perfil .shell,body.print-ficha .shell{display:block!important}
+  body.print-perfil .mainwrap,body.print-perfil main,body.print-ficha .mainwrap,body.print-ficha main{width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
+  body.print-perfil .pv,body.print-ficha .pv{gap:10px!important}
+  body.print-perfil .pv-hero{padding:14px!important}
+  body.print-perfil .pp-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.print-perfil .pp-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}
+  body.print-perfil .pp-t b{font-size:20px}
+}
