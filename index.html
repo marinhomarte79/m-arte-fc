@@ -3,39 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#C3262C">
+<meta name="theme-color" content="#05070D">
 <meta name="robots" content="noindex">
 <title>M ARTE FC Match Analyst</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html,body{margin:0;min-height:100%}
 img{max-width:100%}
 [hidden]{display:none!important}
 </style>
-<link rel="stylesheet" href="styles.css?v=202611041426">
+<link rel="stylesheet" href="styles.css?v=202611041442">
 </head>
 <body>
+<div class="shell">
+<aside class="side" id="side" hidden>
+  <a class="side-logo" href="#inicio" title="M Arte FC"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect x="3" y="7" width="26" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="16" y1="7" x2="16" y2="25" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg></a>
+  <nav class="side-nav" id="tabs"></nav>
+  <div class="side-foot"><div class="side-user" id="sideUser"></div><button id="btnLogout" type="button" class="side-out" title="Sair">Sair</button></div>
+</aside>
+<div class="mainwrap">
 <header class="top" id="hdr" hidden>
-  <div class="top-in gut">
+  <div class="top-in">
     <div class="brand"><b>M Arte FC</b><span id="hdrClub">Análise de jogo</span></div>
     <select class="hdr-sel" id="selClub" aria-label="Clube" hidden></select>
     <select class="hdr-sel" id="selTeam" aria-label="Equipa"></select>
     <div class="score" id="hdrScore"></div>
     <span class="sync" id="sync"><i></i>Ligado</span>
-    <span class="user"><span id="hdrUser"></span><button id="btnLogout" type="button">Sair</button></span>
+    <span class="user"><span id="hdrUser"></span></span>
   </div>
-  <nav class="tabs gut" id="tabs"></nav>
 </header>
 <main class="gut" id="app"></main>
+</div>
+</div>
 <div class="toast" id="toast" hidden></div>
 <input type="file" id="importFile" accept=".json,application/json" hidden>
 <script src="supabase.js"></script>
-<script src="config.js?v=202611041426"></script>
-<script src="app.js?v=202611041426"></script>
+<script src="config.js?v=202611041442"></script>
+<script src="app.js?v=202611041442"></script>
 </body>
 </html>

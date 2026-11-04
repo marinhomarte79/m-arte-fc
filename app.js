@@ -110,8 +110,8 @@ async function selectClub(id, quiet){
 }
 function applyBrand(){
   const c=S.club&&S.club.color;
-  if(c && /^#[0-9a-f]{6}$/i.test(c)){ document.documentElement.style.setProperty('--red',c); document.documentElement.style.setProperty('--red-deep',c); document.querySelector('meta[name=theme-color]').content=c; }
-  else { document.documentElement.style.removeProperty('--red'); document.documentElement.style.removeProperty('--red-deep'); }
+  if(c && /^#[0-9a-f]{6}$/i.test(c)) document.documentElement.style.setProperty('--club',c);
+  else document.documentElement.style.removeProperty('--club');
 }
 function selectTeam(id){ S.team=S.teams.find(t=>t.id===id)||null; lsSet('team-'+S.club.id,id); S.cur=null; S.pending=null; pickCur(); render(); }
 function pickCur(){
@@ -496,11 +496,11 @@ function idxChart(list){
   const anc=i=>i===0?'start':i===n?'end':'middle';
   const lbl=pts.map((p,i)=>`<text x="${X(i)}" y="${H-B+16}" text-anchor="${anc(i)}" font-size="10.5" fill="var(--muted)">${esc((p.m.date||'').slice(8,10)+'/'+(p.m.date||'').slice(5,7))}</text><text x="${X(i)}" y="${H-B+29}" text-anchor="${anc(i)}" font-size="10" fill="var(--muted)">${esc(short(p.m.opp).slice(0,10))}</text>`).join('');
   return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:280px;height:auto" role="img" aria-label="Evolução da nota por jogo">${g}
-    <path d="${area}" fill="var(--red)" opacity=".08"/><path d="${path}" fill="none" stroke="var(--red)" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="${area}" fill="var(--acc)" opacity=".08"/><path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2.4" stroke-linejoin="round"/>
     ${cpts.length>1?`<path d="${cpath}" fill="none" stroke="var(--opp)" stroke-width="2" stroke-dasharray="5 4"/>`:''}
-    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.v)}" r="${i===n?5:3.5}" fill="var(--red)" stroke="var(--card)" stroke-width="1.5"><title>${esc(p.m.opp)}: ${String(p.v).replace('.',',')}</title></circle>`).join('')}
+    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.v)}" r="${i===n?5:3.5}" fill="var(--acc)" stroke="var(--card)" stroke-width="1.5"><title>${esc(p.m.opp)}: ${String(p.v).replace('.',',')}</title></circle>`).join('')}
     <text x="${X(n)}" y="${Y(pts[n].v)-12}" text-anchor="end" font-size="13" font-weight="700" fill="var(--ink)">${String(pts[n].v).replace('.',',')}</text>${lbl}</svg></div>
-    <div class="legend"><span><i style="background:var(--red)"></i>Nota objectiva (0–10)</span>${cpts.length>1?'<span><i style="background:var(--opp)"></i>Avaliação do treinador (×2)</span>':''}</div>`;
+    <div class="legend"><span><i style="background:var(--acc)"></i>Nota objectiva (0–10)</span>${cpts.length>1?'<span><i style="background:var(--opp)"></i>Avaliação do treinador (×2)</span>':''}</div>`;
 }
 function vAuto(){
   const list=seasonMatches().filter(m=>m.events.length);
@@ -598,16 +598,16 @@ function radarSVG(axes){
   const team=axes.map((a,i)=>P(i,a.t).join(',')).join(' '), me=axes.map((a,i)=>P(i,a.v).join(',')).join(' ');
   return `<svg viewBox="-40 0 ${W+80} ${H}" style="width:100%;max-width:420px;height:auto;display:block;margin:0 auto" role="img" aria-label="Perfil do jogador comparado com a média da equipa">${g}
     <polygon points="${team}" fill="var(--opp)" fill-opacity=".10" stroke="var(--opp)" stroke-width="1.5" stroke-dasharray="4 3"/>
-    <polygon points="${me}" fill="var(--red)" fill-opacity=".22" stroke="var(--red)" stroke-width="2.2"/>
-    ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--red)"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>
-    <div class="legend" style="justify-content:center"><span><i style="background:var(--red)"></i>Jogador</span><span><i style="background:var(--opp)"></i>Média da equipa</span></div>`;
+    <polygon points="${me}" fill="var(--acc)" fill-opacity=".22" stroke="var(--acc)" stroke-width="2.2"/>
+    ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--acc)"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>
+    <div class="legend" style="justify-content:center"><span><i style="background:var(--acc)"></i>Jogador</span><span><i style="background:var(--opp)"></i>Média da equipa</span></div>`;
 }
 function ratingLine(games){
   const pts=games.filter(g=>g.played&&g.r!=null); if(pts.length<2) return '<p class="note">A evolução da nota aparece a partir de 2 jogos.</p>';
   const W=1100,H=200,L=30,R=16,T=16,B=28,n=pts.length-1,X=i=>L+(n?i/n:0)*(W-L-R),Y=v=>T+(1-(v-3)/7)*(H-T-B);
   let g=''; for(const v of [4,6,8,10]) g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-5}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`;
   const d=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.r).toFixed(1)).join(' ');
-  return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:230px;height:auto" role="img" aria-label="Evolução da nota">${g}<path d="${d}" fill="none" stroke="var(--red)" stroke-width="2.2"/>
+  return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:230px;height:auto" role="img" aria-label="Evolução da nota">${g}<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2.4" class="glow"/>
     ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.r)}" r="4" class="rtc ${rtCls(p.r)}"><title>${esc(p.m.opp)}: ${f1r(p.r)}</title></circle><text x="${X(i)}" y="${Y(p.r)-10}" font-size="12" font-weight="700" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--ink)">${f1r(p.r)}</text><text x="${X(i)}" y="${H-8}" font-size="11" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--muted)">${esc(fmtDate(p.m.date).slice(0,5))} ${esc(short(p.m.opp).slice(0,12))}</text>`).join('')}</svg></div>`;
 }
 function radarDark(axes){
@@ -726,18 +726,101 @@ async function resizeImage(file){
 }
 
 /* =========================================================
+   INÍCIO — painel
+   ========================================================= */
+function ring(pct,{size=130,stroke=10,from='#38BDF8',to='#8B5CF6',inner='',sub=''}={}){
+  const r=(size-stroke)/2, c=2*Math.PI*r, off=c*(1-Math.max(0,Math.min(1,pct))), id='rg'+(++HEATN);
+  return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${Math.round(pct*100)}%"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="${stroke}"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="url(#${id})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 ${size/2} ${size/2})" class="glow"/>
+    ${inner?`<text x="50%" y="${sub?'48%':'54%'}" text-anchor="middle" font-size="${size*.2}" font-weight="700" fill="#fff">${inner}</text>`:''}${sub?`<text x="50%" y="64%" text-anchor="middle" font-size="${size*.09}" fill="var(--muted)">${sub}</text>`:''}</svg>`;
+}
+function wave(vals,{W=420,H=110,color='#3B82F6',dots=true,min=null,max=null}={}){
+  if(vals.length<2) vals=vals.length?[vals[0],vals[0]]:[5,5];
+  const lo=min??Math.min(...vals), hi=max??Math.max(...vals), rg=(hi-lo)||1, n=vals.length-1, X=i=>8+i/n*(W-16), Y=v=>H-14-(v-lo)/rg*(H-34);
+  const pts=vals.map((v,i)=>[X(i),Y(v)]); let d=`M${pts[0][0]} ${pts[0][1]}`;
+  for(let i=1;i<pts.length;i++){ const [x0,y0]=pts[i-1],[x1,y1]=pts[i],mx=(x0+x1)/2; d+=` C${mx} ${y0} ${mx} ${y1} ${x1} ${y1}`; }
+  const id='wv'+(++HEATN);
+  return `<svg class="wave" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".35"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d} L${X(n)} ${H} L${X(0)} ${H} Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2.4" class="glow"/>
+    ${dots?pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="${i===n?4.5:3}" fill="#BFE3FF" class="glow"/>`).join(''):''}</svg>`;
+}
+function vInicio(){
+  const now=new Date(), h=now.getHours(), greet=h<12?'Bom dia':h<20?'Boa tarde':'Boa noite';
+  const nome=(S.profile.full_name||S.profile.email||'').split(' ')[0];
+  const all=teamMatches().filter(m=>m.events.length).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const list=seasonMatches().filter(m=>m.events.length);
+  const idx=list.map(matchIndex).filter(v=>v!=null), P=list.length?seasonPseudo(list):null, gIdx=P?matchIndex(P):null;
+  const last=all[all.length-1]||null, lastIdx=last?matchIndex(last):null, lastSt=last?stats(last):null;
+  const trend=idx.length>=2?idx[idx.length-1]-idx[Math.max(0,idx.length-3)]:0;
+  const mood=idx.length<2?['Sem histórico','var(--muted)']:trend>0.3?['Em subida','#4ADE80']:trend<-0.3?['Em quebra','#F87171']:['Estável','#60A5FA'];
+  const ps=players(), disp=ps.filter(p=>(p.status||'disponivel')==='disponivel').length, les=ps.filter(p=>p.status==='lesionado').length, other=ps.length-disp-les;
+  const fichas=ps.filter(p=>p.birth_date&&p.pos&&Object.keys(p.attrs||{}).length).length;
+  const last7=all.slice(-7), acts=last7.map(m=>m.events.length), amax=Math.max(1,...acts), ai=acts.indexOf(Math.max(...acts));
+  const steps=[];
+  if(last){ steps.push(['Registar acções do último jogo',last.events.length>0]); steps.push(['Definir onze e formação',!!last.lineup]); steps.push(['Avaliação do treinador',!!(last.self&&Object.keys(last.self.ratings||{}).length)]); if(S.club.ai_enabled) steps.push(['Relatório técnico com IA',!!last.ai]); }
+  steps.push(['Fichas dos jogadores completas',ps.length>0&&fichas===ps.length]);
+  const fmtLong=now.toLocaleDateString('pt-PT',{day:'numeric',month:'long',year:'numeric'}), wd=now.toLocaleDateString('pt-PT',{weekday:'long'});
+  const sc=last?score(last):null;
+  const sh=(k,l,href)=>`<a class="sc-i" href="${href}">${ICON[k]}<span>${l}</span></a>`;
+  return `<div class="dash">
+    <section class="card d-hello"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><div class="muted">${greet},</div><h1 class="d-name">${esc(nome)}</h1><p class="muted" style="margin:8px 0 0">${last?`Último jogo: ${esc(last.home)} vs ${esc(last.opp)}.`:'Crie o primeiro jogo para começar.'}<br>Preparar, registar, analisar.</p></div><span class="pill d-clock" id="dClock">${now.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="d-wave">${wave(idx.length?idx:[5,5.4,5.1,5.8,5.6,6.2],{min:0,max:10})}</div>${idx.length?'':'<div class="note d-wnote">Exemplo: a linha da nota da equipa aparece com os jogos registados.</div>'}</section>
+    <section class="card d-date"><div class="d-dt">${esc(fmtLong)}</div><div class="muted" style="text-transform:capitalize">${esc(wd)}</div>
+      <div class="d-club"><span class="d-badge" style="background:${esc(S.club.color||'#3B82F6')}">${esc((S.club.short_name||initials(S.club.name)).slice(0,4))}</span><div><b>${esc(S.club.name)}</b><div class="muted small">${esc(S.team.name)} · Época ${seasonLabel(S.season)}</div></div></div>
+      <div class="row small muted" style="gap:14px;margin-top:12px"><span>Jogos: <b style="color:var(--ink)">${list.length}</b></span><span>Plantel: <b style="color:var(--ink)">${ps.length}</b></span></div></section>
+    <section class="card d-perf"><div class="d-h">Desempenho da equipa<span class="sp"></span><span class="small muted">Época</span></div>
+      <div class="row" style="justify-content:space-between;align-items:center;gap:12px"><div><div class="d-big">${gIdx!=null?Math.round(gIdx*10):'—'}<small>%</small></div><div class="muted">${gIdx==null?'Sem jogos registados':gIdx>=7?'Excelente nível':gIdx>=5.5?'Bom caminho':'A precisar de trabalho'}</div>
+        <div class="row" style="gap:28px;margin-top:16px"><div><div class="small muted">Recuperações</div><b class="d-n">${P?stats(P).rec.t:0}</b></div><div><div class="small muted">Golos</div><b class="d-n">${P?stats(P).goals:0}</b></div></div></div>
+        ${ring((gIdx||0)/10,{size:140,stroke:11})}</div></section>
+    <section class="card d-last"><div class="d-h">Último jogo</div>${last?`<div class="d-lastc">${ring((lastIdx||0)/10,{size:150,stroke:9,from:'#FDBA74',to:'#F97316',inner:lastIdx!=null?String(lastIdx).replace('.',','):'—',sub:'nota / 10'})}
+      <div class="small muted" style="text-align:center">vs ${esc(last.opp)} · ${esc(fmtDate(last.date))}${sc?` · ${sc.join('–')}`:''}</div>
+      <button class="btn pri d-go" data-open="${last.id}" data-goto="analise">▶ Ver análise</button></div>`:'<p class="note">Ainda sem jogos.</p>'}</section>
+    <section class="card d-tasks"><div class="d-h">Próximos passos</div>${steps.map(([t,ok])=>`<div class="d-task"><span class="d-chk ${ok?'on':''}">${ok?'✓':''}</span><span>${t}</span><span class="d-st ${ok?'':'pend'}">${ok?'Feito':'Por fazer'}</span></div>`).join('')}</section>
+    <section class="card d-mood"><div class="d-h">Momento da equipa</div><div class="d-mv" style="color:${mood[1]}">${mood[0]}</div>
+      <div class="d-wave sm">${wave(idx.slice(-6).length>1?idx.slice(-6):[5,5.6,5.2,5.9,5.5,6],{W:360,H:80,color:'#60A5FA',dots:false})}</div>
+      <div class="small muted">Saldo de bola no último jogo</div><div class="d-sv" style="color:${lastSt&&(lastSt.rec.t-lastSt.perda.t-lastSt.pe.t)>=0?'#4ADE80':'#F87171'}">${lastSt?((lastSt.rec.t-lastSt.perda.t-lastSt.pe.t)>0?'+':'')+(lastSt.rec.t-lastSt.perda.t-lastSt.pe.t):'—'}</div></section>
+    <section class="card d-act"><div class="d-h">Acções registadas por jogo<span class="sp"></span><span class="small muted">Últimos ${last7.length||7}</span></div>
+      <div class="d-bars">${(last7.length?last7:Array(7).fill(null)).map((m,i)=>{ const v=m?m.events.length:0; return `<div class="d-bar ${m&&i===ai?'max':''}">${m&&i===ai?`<em>${v}</em>`:''}<span><i style="height:${m?Math.max(6,v/amax*100):8}%"></i></span><small>${m?esc(short(m.opp).slice(0,6)):'—'}</small></div>`; }).join('')}</div></section>
+    <section class="card d-short"><div class="d-h">Atalhos</div><div class="sc-g">${canEdit()?sh('jogos','Novo jogo','#jogos'):''}${canEdit()?sh('registo','Registo','#registo'):''}${sh('analise','Análise','#analise')}${sh('individual','Individual','#individual')}${sh('plantel','Plantel','#plantel')}${sh('auto','Autoanálise','#auto')}</div></section>
+    <section class="card d-ev"><div class="d-h">Últimos jogos<span class="sp"></span><a class="small" href="#jogos" style="color:#60A5FA;text-decoration:none">Ver todos</a></div>
+      ${[...all].reverse().slice(0,4).map(m=>{ const v=matchIndex(m), d=(m.date||'').split('-'), s2=score(m); return `<a class="d-evr" href="#analise" data-open="${m.id}"><span class="d-day"><b>${d[2]||'--'}</b><small>${d[1]?new Date(m.date).toLocaleDateString('pt-PT',{month:'short'}).replace('.',''):''}</small></span><span><b>vs ${esc(m.opp)}</b><small class="muted">${s2?s2.join('–')+' · ':''}${m.events.length} acções</small></span><i class="d-dot" style="background:${v==null?'var(--muted)':v>=7?'#4ADE80':v>=5.5?'#F59E0B':'#F87171'}"></i></a>`; }).join('')||'<p class="note">Ainda sem jogos.</p>'}</section>
+    <section class="card d-sys"><div class="d-h">Estado do plantel</div><div style="display:grid;place-items:center;margin:6px 0 12px">${ring(ps.length?disp/ps.length:0,{size:130,stroke:8,from:'#60A5FA',to:'#3B82F6',inner:ps.length?Math.round(disp/ps.length*100)+'%':'—',sub:'disponíveis'})}</div>
+      ${[['Disponíveis',disp],['Lesionados',les],['Outros (dúvida, castigo…)',other],['Fichas completas',fichas]].map(([l,v])=>`<div class="d-sb"><span>${l}</span><span class="d-sbt"><i style="width:${ps.length?v/ps.length*100:0}%"></i></span><b>${v}</b></div>`).join('')}</section>
+  </div>`;
+}
+setInterval(()=>{ const c=$('dClock'); if(c) c.textContent=new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}); },15000);
+
+/* =========================================================
    RENDER
    ========================================================= */
-const VIEWS=[['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
-function view(){ const h=location.hash.slice(1); if(h==='jogador'&&S.playerId&&S.players.some(p=>p.id===S.playerId)) return 'jogador'; const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:(canEdit()?'registo':'analise'); }
+const ic=d=>`<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON={
+  inicio:ic('<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+  registo:ic('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3" fill="currentColor"/>'),
+  analise:ic('<path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/>'),
+  individual:ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/>'),
+  auto:ic('<path d="M12 3l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.8z"/>'),
+  jogos:ic('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  plantel:ic('<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c.8-3.3 3.2-5 6-5s5.2 1.7 6 5M14.5 15c2.6-.4 5 .9 6 4"/>'),
+  clube:ic('<path d="M12 3l7 3v5c0 5-3.2 8.3-7 10-3.8-1.7-7-5-7-10V6z"/>'),
+  admin:ic('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
+  conta:ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+};
+const VIEWS=[['inicio','Início',()=>true],['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
+function view(){ const h=location.hash.slice(1); if(h==='jogador'&&S.playerId&&S.players.some(p=>p.id===S.playerId)) return 'jogador'; const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:'inicio'; }
 function render(){
   const app=$('app');
-  if(!S.session){ $('hdr').hidden=true; app.innerHTML=vLogin(); return; }
-  $('hdr').hidden=false;
+  if(!S.session){ $('hdr').hidden=true; $('side').hidden=true; document.body.classList.add('nologin'); app.innerHTML=vLogin(); return; }
+  $('hdr').hidden=false; $('side').hidden=false; document.body.classList.remove('nologin');
   renderHeader();
   const v=view();
-  $('tabs').innerHTML=VIEWS.filter(x=>x[2]()).map(([k,l])=>`<a href="#${k}" ${k===v?'aria-current="page"':''}>${l}</a>`).join('');
+  const cur=v==='jogador'?'plantel':v;
+  $('tabs').innerHTML=VIEWS.filter(x=>x[2]()).map(([k,l])=>`<a href="#${k}" ${k===cur?'aria-current="page"':''} title="${l}">${ICON[k]||''}<span>${l}</span></a>`).join('');
+  const ua=$('sideUser'); if(ua) ua.innerHTML=`<span class="side-av">${esc(initials(S.profile.full_name||S.profile.email))}</span><span>${esc((S.profile.full_name||S.profile.email).split(' ')[0])}</span>`;
   if(v==='admin'){ app.innerHTML=vSuper(); return; }
+  if(v==='inicio'&&(!S.club||!S.team||(!clubActive(S.club)&&!S.isSuper))){ /* cai nas mensagens abaixo */ }
+  else if(v==='inicio'){ app.innerHTML=vInicio(); return; }
   if(v==='conta'){ app.innerHTML=vConta(); return; }
   if(!S.club){ app.innerHTML=`<div class="card empty"><h2>Sem clube associado</h2><p class="muted">${S.isSuper?'Crie o primeiro clube na área Super-admin.':'A sua conta ainda não foi associada a nenhum clube. Peça acesso ao administrador do seu clube.'}</p>${S.isSuper?'<a class="btn pri" href="#admin">Abrir Super-admin</a>':''}</div>`; return; }
   if(!clubActive(S.club) && !S.isSuper){ app.innerHTML=`<div class="card empty"><h2>Acesso suspenso</h2><p class="muted">O acesso do ${esc(S.club.name)} está suspenso${S.club.paid_until&&S.club.paid_until<today()?' por mensalidade em atraso':''}. Contacte a M Arte Design: +351 934 574 197 · marinho_ribeiro@hotmail.com</p></div>`; return; }
@@ -931,7 +1014,7 @@ function vJogos(){
   ${list.length?`<section><div class="sec-h">Jogos · ${esc(S.team.name)} <span class="pill">${list.length}</span></div><div class="mlist">${list.map(m=>{ const sc=score(m); return `<div class="mcard ${m.id===S.cur?'cur':''}">
     <span class="note">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''}</span><span class="t">${esc(m.home)} vs ${esc(m.opp)}</span>
     <div class="row"><span class="s">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="pill">${esc(m.status||'')}</span><span class="pill">${m.events.length} acções</span>${m.locked?'<span class="pill">Trancado</span>':''}</div>
-    <div class="row">${m.id===S.cur?'<span class="pill" style="background:var(--red);color:var(--on-red)">Jogo activo</span>':`<button class="btn sm pri" data-open="${m.id}">Abrir</button>`}
+    <div class="row">${m.id===S.cur?'<span class="pill" style="background:var(--acc);color:var(--on-red)">Jogo activo</span>':`<button class="btn sm pri" data-open="${m.id}">Abrir</button>`}
       <a class="btn sm" href="#analise" data-open="${m.id}" style="text-decoration:none">Análise</a>
       ${isAdmin()?(S.confirm==='m'+m.id?`<span class="confirm">Apagar este jogo? <button class="btn sm pri" data-delm="${m.id}">Apagar</button><button class="btn sm" data-noconf>Não</button></span>`:`<button class="btn sm ghost" data-conf="m${m.id}">Apagar</button>`):''}</div></div>`; }).join('')}</div></section>`:''}
   ${canEdit()?`<section class="card"><h2>Novo jogo · ${esc(S.team.name)}</h2><form id="newMatch" class="form">
@@ -1198,7 +1281,7 @@ document.addEventListener('click', async ev=>{
   else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
   else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
   else if(d.sort){ S.sortI=S.sortI.k===d.sort?{k:d.sort,d:-S.sortI.d}:{k:d.sort,d:d.sort==='name'?1:-1}; render(); }
-  else if(d.open){ S.cur=d.open; S.pending=null; if(t.tagName!=='A') location.hash='#'+(canEdit()?'registo':'analise'); render(); }
+  else if(d.open){ S.cur=d.open; S.pending=null; if(t.tagName!=='A') location.hash='#'+(d.goto||(canEdit()?'registo':'analise')); render(); }
   else if(d.conf){ S.confirm=d.conf; render(); }
   else if(d.noconf!==undefined){ S.confirm=null; render(); }
   else if(d.delm){ S.confirm=null; const { error }=await sb.from('matches').delete().eq('id',d.delm); if(error) toast(error.message); else { delete S.matches[d.delm]; S.cur=null; pickCur(); toast('Jogo apagado.'); } render(); }
