@@ -98,7 +98,7 @@ async function selectClub(id, quiet){
     sb.from('players').select('*').eq('club_id',id).order('name'),
     sb.from('matches').select('*').eq('club_id',id).order('date',{ascending:false})
   ]);
-  S.teams=teams||[]; S.players=players||[];
+  S.teams=teams||[]; S.players=players||[]; loadPhotos();
   for(const r of (matches||[])) S.matches[r.id]=fromRow(r);
   restorePending();
   const lt=lsGet('team-'+id);
@@ -434,7 +434,7 @@ function vIndSeason(){
   <section class="card"><div class="tscroll"><table class="st">
     <thead><tr><th></th><th></th><th colspan="2" class="band">Recuperações</th><th colspan="2">Perdas</th><th colspan="2" class="band">Passes errados</th><th>Faltas</th><th>Faltas</th><th></th><th></th><th colspan="2" class="band">Saldo de bola</th><th></th><th></th></tr>
     <tr>${th('name','Jogador')}${th('jogos','Jogos')}${th('rec','Total','band')}${th('rec_j','/jogo','band')}${th('perda','Total')}${th('perda_j','/jogo')}${th('pe','Total','band')}${th('pe_j','/jogo','band')}${th('fc','Com.')}${th('fs','Sofr.')}${th('shot','Remates')}${th('golos','Golos')}${th('saldo','Total','band')}${th('saldo_j','/jogo','band')}<th>Evolução</th>${th('nota','Nota média')}</tr></thead>
-    <tbody>${rows.map(r=>`<tr><td><b>${esc(r.name)}</b>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}${r.gk?' <span class="role">GR</span>':''}</td><td>${r.jogos}</td>
+    <tbody>${rows.map(r=>`<tr><td><button class="linkbtn" data-ficha="${r.id}">${esc(r.name)}</button>${r.num?` <span class="muted mono">${esc(r.num)}</span>`:''}${r.gk?' <span class="role">GR</span>':''}</td><td>${r.jogos}</td>
       <td class="band">${heat(r.rec,mx.rec,'var(--good)')}</td><td class="band">${f1(r.rec_j)}</td><td>${heat(r.perda,mx.perda,'var(--red)')}</td><td>${f1(r.perda_j)}</td><td class="band">${heat(r.pe,mx.pe,'var(--pe)')}</td><td class="band">${f1(r.pe_j)}</td>
       <td>${r.fc}</td><td>${r.fs}</td><td>${r.shot}</td><td>${r.golos||''}</td>
       <td class="band"><b style="color:${sc(r.saldo)}">${sg(r.saldo)}</b></td><td class="band" style="color:${sc(r.saldo_j)}">${r.saldo_j>0?'+':''}${f1(r.saldo_j)}</td><td>${spark(r.series)}</td><td>${r.rn?`<span class="rt ${rtCls(r.nota)}">${f1r(r.nota)}</span>`:'—'}</td></tr>`).join('')}
@@ -541,10 +541,147 @@ function scopeBarAuto(){
 }
 
 /* =========================================================
+   FICHA DO JOGADOR
+   ========================================================= */
+const POS_L={GR:'Guarda-redes',DEF:'Defesa',MED:'Médio',AV:'Avançado','':'—'};
+const POS2_OPTS=['','Defesa central','Lateral direito','Lateral esquerdo','Médio defensivo','Médio centro','Médio ofensivo','Extremo direito','Extremo esquerdo','Ponta de lança','Segundo avançado'];
+const STATUS={disponivel:['Disponível','good'],duvida:['Dúvida','warn'],lesionado:['Lesionado','bad'],castigado:['Castigado','bad'],indisponivel:['Indisponível','bad']};
+const ATTR_G=[['Técnica',[['passe','Passe'],['rececao','Receção'],['drible','Drible'],['finalizacao','Finalização'],['cabeceamento','Jogo aéreo']]],
+  ['Táctica',[['posicionamento','Posicionamento'],['leitura','Leitura de jogo'],['decisao','Tomada de decisão'],['coberturas','Coberturas defensivas']]],
+  ['Física',[['velocidade','Velocidade'],['resistencia','Resistência'],['forca','Força'],['agilidade','Agilidade']]],
+  ['Mental',[['concentracao','Concentração'],['atitude','Atitude e compromisso'],['lideranca','Liderança'],['confianca','Confiança']]]];
+const GK_ATTR=['Guarda-redes',[['gr_reflexos','Reflexos'],['gr_saidas','Saídas e cruzamentos'],['gr_pes','Jogo de pés'],['gr_posic','Posicionamento na baliza']]];
+async function loadPhotos(){
+  S.photos=S.photos||{};
+  const ps=S.players.filter(p=>p.photo_path); if(!ps.length) return;
+  const { data } = await sb.storage.from('player-photos').createSignedUrls(ps.map(p=>p.photo_path), 3600);
+  (data||[]).forEach((d,i)=>{ if(d&&d.signedUrl) S.photos[ps[i].id]=d.signedUrl; });
+  if(['plantel','jogador'].includes(view())) render();
+}
+function avatar(p,size){ const u=S.photos&&S.photos[p.id]; return `<span class="av ${size||''}">${u?`<img src="${esc(u)}" alt="">`:`<span>${esc(p.num||initials(p.name))}</span>`}</span>`; }
+function statusPill(p){ const st=STATUS[p.status||'disponivel']||STATUS.disponivel; return `<span class="pill st-${st[1]}">${st[0]}${p.status&&p.status!=='disponivel'&&p.status_until?' até '+fmtDate(p.status_until):''}</span>`; }
+function ageOf(d){ if(!d) return null; const b=new Date(d), n=new Date(); let a=n.getFullYear()-b.getFullYear(); if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate())) a--; return a; }
+function attrsOverall(p){ const v=Object.values(p.attrs||{}).map(Number).filter(x=>x>0); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+function playerGames(pid){
+  const out=[];
+  for(const m of seasonMatches()){
+    const L=m.halfLen||45, lu=lineupOf(m), started=(lu.slots||[]).includes(pid), bench=(lu.bench||[]).includes(pid), approx=!m.lineup;
+    const sIn=m.events.find(e=>e.type==='subst'&&e.p2===pid), sOut=m.events.find(e=>e.type==='subst'&&e.p===pid);
+    const ev=m.events.filter(e=>e.p===pid&&e.type!=='subst'); const played=!!(started||sIn||ev.length);
+    if(!played) { if(bench) out.push({m,played:false,bench:true}); continue; }
+    const at=e=>(e.half-1)*L+e.t/60; let min=null;
+    if(started) min=sOut?at(sOut):2*L; else if(sIn) min=Math.max(0,(sOut?at(sOut):2*L)-at(sIn));
+    const c=t=>ev.filter(e=>e.type===t).length, r=rateMatch(m)[pid];
+    out.push({m,played:true,approx,started:started===true,sub:!!sIn&&!started,min:min!=null?Math.round(min):null,r:r?r.r:null,
+      rec:c('rec'),perda:c('perda'),pe:c('pe'),fc:c('fc'),fs:c('fs'),shots:ev.filter(isShot).length,on:ev.filter(e=>e.type==='golo'||(e.type==='remate'&&e.sub==='baliza')).length,golos:c('golo'),am:c('amarelo'),vm:c('vermelho'),def:c('gr_dc')+c('gr_di')+c('gr_ca')});
+  }
+  return out;
+}
+function radarSVG(axes){
+  const W=320,H=300,cx=160,cy=150,R=105,n=axes.length, ang=i=>-Math.PI/2+i*2*Math.PI/n, P=(i,v)=>[cx+Math.cos(ang(i))*R*v, cy+Math.sin(ang(i))*R*v];
+  let g=''; for(const k of [0.25,0.5,0.75,1]) g+=`<polygon points="${axes.map((_,i)=>P(i,k).join(',')).join(' ')}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
+  axes.forEach((a,i)=>{ const [x,y]=P(i,1); g+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/>`; const [lx,ly]=P(i,1.2); g+=`<text x="${lx}" y="${ly+4}" font-size="11.5" font-weight="600" text-anchor="${Math.abs(lx-cx)<8?'middle':lx>cx?'start':'end'}" fill="var(--ink)">${a.l}</text>`; });
+  const team=axes.map((a,i)=>P(i,a.t).join(',')).join(' '), me=axes.map((a,i)=>P(i,a.v).join(',')).join(' ');
+  return `<svg viewBox="-40 0 ${W+80} ${H}" style="width:100%;max-width:420px;height:auto;display:block;margin:0 auto" role="img" aria-label="Perfil do jogador comparado com a média da equipa">${g}
+    <polygon points="${team}" fill="var(--opp)" fill-opacity=".10" stroke="var(--opp)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <polygon points="${me}" fill="var(--red)" fill-opacity=".22" stroke="var(--red)" stroke-width="2.2"/>
+    ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--red)"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>
+    <div class="legend" style="justify-content:center"><span><i style="background:var(--red)"></i>Jogador</span><span><i style="background:var(--opp)"></i>Média da equipa</span></div>`;
+}
+function ratingLine(games){
+  const pts=games.filter(g=>g.played&&g.r!=null); if(pts.length<2) return '<p class="note">A evolução da nota aparece a partir de 2 jogos.</p>';
+  const W=1100,H=200,L=30,R=16,T=16,B=28,n=pts.length-1,X=i=>L+(n?i/n:0)*(W-L-R),Y=v=>T+(1-(v-3)/7)*(H-T-B);
+  let g=''; for(const v of [4,6,8,10]) g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${L-5}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`;
+  const d=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.r).toFixed(1)).join(' ');
+  return `<div class="tscroll"><svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:520px;max-height:230px;height:auto" role="img" aria-label="Evolução da nota">${g}<path d="${d}" fill="none" stroke="var(--red)" stroke-width="2.2"/>
+    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.r)}" r="4" class="rtc ${rtCls(p.r)}"><title>${esc(p.m.opp)}: ${f1r(p.r)}</title></circle><text x="${X(i)}" y="${Y(p.r)-10}" font-size="12" font-weight="700" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--ink)">${f1r(p.r)}</text><text x="${X(i)}" y="${H-8}" font-size="11" text-anchor="${i===0?'start':i===n?'end':'middle'}" fill="var(--muted)">${esc(fmtDate(p.m.date).slice(0,5))} ${esc(short(p.m.opp).slice(0,12))}</text>`).join('')}</svg></div>`;
+}
+function vJogador(){
+  const p=S.players.find(x=>x.id===S.playerId), ed=canEdit(), E=ed&&S.fichaEdit;
+  const games=playerGames(p.id), pl=games.filter(g=>g.played);
+  const sum=k=>pl.reduce((a,g)=>a+(g[k]||0),0), mins=pl.reduce((a,g)=>a+(g.min||0),0), rs=pl.filter(g=>g.r!=null).map(g=>g.r);
+  const avgR=rs.length?rs.reduce((a,b)=>a+b,0)/rs.length:null, bestR=rs.length?Math.max(...rs):null;
+  const age=ageOf(p.birth_date), ov=attrsOverall(p);
+  const team=seasonPlayers(seasonMatches()).filter(r=>r.jogos>0), me=team.find(r=>r.id===p.id);
+  const per=(r,k)=>r.jogos?r[k]/r.jogos:0, avgT=k=>team.length?team.reduce((a,r)=>a+per(r,k),0)/team.length:0, mx=k=>Math.max(0.001,...team.map(r=>per(r,k)));
+  const axDef=[['Recuperação','rec',1],['Conservação','perda',-1],['Passe','pe',-1],['Remate','shot',1],['Disciplina','fc',-1],['Faltas sofridas','fs',1]];
+  const axes=me?axDef.map(([l,k,dir])=>{ const v=per(me,k)/mx(k), t=avgT(k)/mx(k); return {l, v:dir>0?v:1-v, t:dir>0?t:1-t, txt:per(me,k).toFixed(1).replace('.',',')+'/jogo'}; }):null;
+  const isGK=p.pos==='GR', groups=isGK?[GK_ATTR,...ATTR_G]:ATTR_G, A=p.attrs||{};
+  const f1=v=>v.toFixed(1).replace('.',','), inp=(k,type='text',extra='')=>`<input class="inp" id="pf-${k}" type="${type}" value="${esc(p[k]??'')}" ${extra}>`;
+  const field=(l,v)=>`<div class="pf-f"><span>${l}</span><b>${v||'—'}</b></div>`;
+  return `<div class="view">
+  <div class="row"><a class="btn sm" href="#plantel">← Plantel</a><span class="sp"></span>${ed?(E?'':`<button class="btn pri" data-fichaedit>Editar ficha</button>`):''}</div>
+  <section class="card pf-head">
+    <div class="pf-photo">${avatar(p,'xl')}${E?`<label class="btn sm" style="margin-top:8px">Mudar foto<input type="file" accept="image/*" data-photo="${p.id}" hidden></label>`:''}</div>
+    <div class="pf-main">
+      <div class="pf-num">${esc(p.num||'')}</div>
+      <h1 class="pf-name">${esc(p.name)}</h1>
+      ${p.full_name?`<div class="muted">${esc(p.full_name)}</div>`:''}
+      <div class="row" style="margin-top:8px;gap:6px"><span class="pill">${POS_L[p.pos||'']}</span>${p.pos2?`<span class="pill">${esc(p.pos2)}</span>`:''}${statusPill(p)}</div>
+      <div class="pf-facts">
+        ${field('Idade',age!=null?age+' anos':'')}${field('Nascimento',fmtDate(p.birth_date))}${field('Nacionalidade',esc(p.nationality))}
+        ${field('Pé preferido',esc(p.foot))}${field('Altura',p.height_cm?p.height_cm+' cm':'')}${field('Peso',p.weight_kg?p.weight_kg+' kg':'')}
+        ${field('No clube desde',fmtDate(p.joined))}${field('Vínculo até',fmtDate(p.contract_until))}${field('Equipa',esc(S.team.name))}
+      </div>
+    </div>
+    <div class="pf-ov"><span>Avaliação geral</span><b class="${ov!=null?rtCls(ov):''}">${ov!=null?f1(ov):'—'}</b><small>média dos atributos (1–10)</small></div>
+  </section>
+  ${E?`<section class="card"><h2>Editar dados</h2><form id="fichaForm" class="formrow">
+    <label class="fl">Nome desportivo${inp('name','text','required')}</label>
+    <label class="fl">Nome completo${inp('full_name')}</label>
+    <label class="fl">Número${inp('num','text','inputmode="numeric"')}</label>
+    <label class="fl">Posição<select class="inp" id="pf-pos">${['','GR','DEF','MED','AV'].map(o=>`<option value="${o}" ${p.pos===o?'selected':''}>${POS_L[o]}</option>`).join('')}</select></label>
+    <label class="fl">Posição específica<select class="inp" id="pf-pos2">${POS2_OPTS.map(o=>`<option ${p.pos2===o?'selected':''}>${o}</option>`).join('')}</select></label>
+    <label class="fl">Data de nascimento${inp('birth_date','date')}</label>
+    <label class="fl">Nacionalidade${inp('nationality')}</label>
+    <label class="fl">Pé preferido<select class="inp" id="pf-foot">${['','Direito','Esquerdo','Ambos'].map(o=>`<option ${p.foot===o?'selected':''}>${o}</option>`).join('')}</select></label>
+    <label class="fl">Altura (cm)${inp('height_cm','number','min="100" max="230"')}</label>
+    <label class="fl">Peso (kg)${inp('weight_kg','number','min="25" max="150"')}</label>
+    <label class="fl">No clube desde${inp('joined','date')}</label>
+    <label class="fl">Vínculo até${inp('contract_until','date')}</label>
+    <label class="fl">Estado<select class="inp" id="pf-status">${Object.entries(STATUS).map(([k,[l]])=>`<option value="${k}" ${(p.status||'disponivel')===k?'selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="fl">Regresso previsto${inp('status_until','date')}</label>
+    <label class="fl" style="grid-column:1/-1">Nota sobre o estado (lesão, castigo…)${inp('status_note')}</label>
+    <div class="pf-attr-ed" style="grid-column:1/-1">${groups.map(([g,list])=>`<div><div class="sec-h">${g}</div>${list.map(([k,l])=>`<label class="pf-ar"><span>${l}</span><input type="range" min="0" max="10" step="1" id="pa-${k}" value="${A[k]||0}" oninput="this.nextElementSibling.textContent=this.value>0?this.value:'—'"><b>${A[k]||'—'}</b></label>`).join('')}</div>`).join('')}</div>
+    <label class="fl" style="grid-column:1/-1">Observações e plano de desenvolvimento<textarea class="inp" id="pf-notes" rows="3">${esc(p.notes||'')}</textarea></label>
+    <div class="row" style="grid-column:1/-1"><button class="btn pri" type="submit">Gravar ficha</button><button class="btn" type="button" data-fichacancel>Cancelar</button></div>
+  </form></section>`:''}
+  ${p.status&&p.status!=='disponivel'&&p.status_note?`<div class="banner">${esc(STATUS[p.status][0])}: ${esc(p.status_note)}</div>`:''}
+  <div class="row" style="justify-content:space-between"><div class="sec-h" style="margin:0">Estatísticas · Época ${seasonLabel(S.season)}</div>${scopeBarAuto()}</div>
+  <div class="kpis">
+    <div class="kpi"><span>Jogos</span><b>${pl.length}</b><small>${pl.filter(g=>g.started).length} titular · ${pl.filter(g=>g.sub).length} suplente</small></div>
+    <div class="kpi"><span>Minutos</span><b>${mins}</b><small>${pl.some(g=>g.approx)?'estimados; há jogos com onze sugerido':'pelo onze e substituições'}</small></div>
+    <div class="kpi"><span>Nota média</span><b>${avgR!=null?`<span class="rt ${rtCls(avgR)}" style="font-size:24px">${f1r(avgR)}</span>`:'—'}</b><small>melhor ${bestR!=null?f1r(bestR):'—'}</small></div>
+    <div class="kpi"><span>Golos</span><b>${sum('golos')}</b><small>${sum('shots')} remates · ${sum('on')} à baliza</small></div>
+    <div class="kpi"><span>Recuperações</span><b>${sum('rec')}</b><small>${pl.length?f1(sum('rec')/pl.length):'0'} por jogo</small></div>
+    <div class="kpi"><span>Perdas + p. err.</span><b>${sum('perda')+sum('pe')}</b><small>${pl.length?f1((sum('perda')+sum('pe'))/pl.length):'0'} por jogo</small></div>
+    <div class="kpi"><span>${isGK?'Defesas':'Faltas C / S'}</span><b>${isGK?sum('def'):sum('fc')+' / '+sum('fs')}</b><small>${isGK?'completas, incompletas e p/ canto':'cometidas / sofridas'}</small></div>
+    <div class="kpi"><span>Cartões</span><b>${sum('am')} <span style="color:var(--gold)">■</span> ${sum('vm')} <span style="color:var(--red)">■</span></b><small>amarelos · vermelhos</small></div>
+  </div>
+  <div class="g2">
+    <section class="card"><h2>Perfil de jogo</h2>${axes?radarSVG(axes):'<p class="note">Sem jogos neste período.</p>'}<p class="note" style="margin:6px 0 0">Valores por jogo comparados com os colegas de equipa (o máximo da equipa = extremidade). Conservação, passe e disciplina: quanto menos perdas, passes errados e faltas, mais longe do centro.</p></section>
+    <section class="card"><h2>Avaliação técnica do treinador</h2>
+      ${groups.map(([g,list])=>{ const vs=list.map(([k])=>+A[k]||0).filter(Boolean); return `<div class="pf-g"><div class="sec-h" style="margin-bottom:4px">${g}${vs.length?`<span class="sp"></span><span class="pill">${f1(vs.reduce((a,b)=>a+b,0)/vs.length)}</span>`:''}</div>${list.map(([k,l])=>{ const v=+A[k]||0; return `<div class="bar" style="grid-template-columns:150px minmax(0,1fr) 30px"><span>${l}</span><span class="tr"><i style="width:${v*10}%;background:${v>=8?'var(--good)':v>=6?'var(--pe)':v?'var(--red)':'transparent'}"></i></span><span class="v">${v||'—'}</span></div>`; }).join('')}</div>`; }).join('')}
+      ${!Object.values(A).some(Number)?`<p class="note">${ed?'Ainda sem avaliação. Carregue em "Editar ficha" para atribuir de 1 a 10.':'Ainda sem avaliação do treinador.'}</p>`:''}</section>
+  </div>
+  <section class="card"><h2>Evolução da nota</h2>${ratingLine(games)}</section>
+  <section class="card"><h2>Jogos na época</h2><div class="tscroll"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Estatuto</th><th>Min.</th><th>Nota</th><th>Rec.</th><th>Perdas</th><th>P. err.</th><th>Remates</th><th>Golos</th><th>Cartões</th></tr></thead><tbody>
+    ${[...games].reverse().map(g=>g.played?`<tr><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>${g.started?'Titular':g.sub?'Suplente':'—'}</td><td>${g.min??'—'}</td><td>${g.r!=null?`<span class="rt ${rtCls(g.r)}">${f1r(g.r)}</span>`:'—'}</td><td>${g.rec}</td><td>${g.perda}</td><td>${g.pe}</td><td>${g.shots}</td><td>${g.golos||''}</td><td>${g.am?'🟨'.repeat(g.am):''}${g.vm?'🟥':''}</td></tr>`:`<tr class="muted"><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>Banco (não utilizado)</td><td colspan="8"></td></tr>`).join('')||'<tr><td class="l muted" colspan="11">Sem jogos neste período.</td></tr>'}
+  </tbody></table></div></section>
+  ${p.notes?`<section class="card"><h2>Observações e plano de desenvolvimento</h2><p style="white-space:pre-wrap;margin:0;max-width:80ch">${esc(p.notes)}</p></section>`:''}
+  </div>`;
+}
+async function resizeImage(file){
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); });
+  const sz=480, sc=Math.min(1,sz/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(r,'image/jpeg',0.85));
+}
+
+/* =========================================================
    RENDER
    ========================================================= */
 const VIEWS=[['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
-function view(){ const h=location.hash.slice(1); const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:(canEdit()?'registo':'analise'); }
+function view(){ const h=location.hash.slice(1); if(h==='jogador'&&S.playerId&&S.players.some(p=>p.id===S.playerId)) return 'jogador'; const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:(canEdit()?'registo':'analise'); }
 function render(){
   const app=$('app');
   if(!S.session){ $('hdr').hidden=true; app.innerHTML=vLogin(); return; }
@@ -563,6 +700,7 @@ function render(){
   else if(v==='analise'&&S.scope==='epoca') app.innerHTML=vAnaliseSeason();
   else if(v==='individual'&&S.scope==='epoca') app.innerHTML=vIndSeason();
   else if(v==='auto') app.innerHTML=vAuto();
+  else if(v==='jogador') app.innerHTML=vJogador();
   else if(v==='jogos'||!m) app.innerHTML=vJogos();
   else if(v==='registo') app.innerHTML=vRegisto(m);
   else if(v==='analise') app.innerHTML=vAnalise(m);
@@ -779,12 +917,14 @@ function cuRefresh(){ const ps=players(), c=S.callup||{}; const nT=ps.filter(p=>
 function vPlantel(){
   const ps=players(), ed=canEdit();
   return `<div class="view"><section class="card"><h2>Plantel · ${esc(S.team.name)} <span class="pill">${ps.length}</span></h2>
-   <div class="sq" style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Nº</span><span>Nome</span><span>Posição</span><span></span></div>
-   ${ps.map(p=>`<div class="sq"><input class="inp mono" data-pf="num" data-id="${p.id}" value="${esc(p.num||'')}" inputmode="numeric" aria-label="Número" ${ed?'':'disabled'}><input class="inp" data-pf="name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nome" ${ed?'':'disabled'}>
+   <div class="sq sqh"><span></span><span>Nº</span><span>Nome</span><span>Posição</span><span>Estado</span><span></span><span></span></div>
+   ${ps.map(p=>`<div class="sq">${avatar(p,'sm')}<input class="inp mono" data-pf="num" data-id="${p.id}" value="${esc(p.num||'')}" inputmode="numeric" aria-label="Número" ${ed?'':'disabled'}><input class="inp" data-pf="name" data-id="${p.id}" value="${esc(p.name)}" aria-label="Nome" ${ed?'':'disabled'}>
      <select class="inp" data-pf="pos" data-id="${p.id}" aria-label="Posição" ${ed?'':'disabled'}>${['','GR','DEF','MED','AV'].map(o=>`<option ${p.pos===o?'selected':''} value="${o}">${o||'—'}</option>`).join('')}</select>
+     <span>${statusPill(p)}</span>
+     <button class="btn sm" data-ficha="${p.id}">Ficha</button>
      ${ed?(S.confirm==='p'+p.id?`<button class="x" data-delp="${p.id}" aria-label="Confirmar remoção" title="Confirmar">✓</button>`:`<button class="x" data-conf="p${p.id}" aria-label="Remover">×</button>`):'<span></span>'}</div>`).join('')}
    ${ed?`<form id="addP" class="row" style="margin-top:12px"><input class="inp mono" id="np-num" placeholder="Nº" style="width:70px"><input class="inp" id="np-name" placeholder="Nome do jogador" style="flex:1;min-width:160px" required><select class="inp" id="np-pos" style="width:90px">${['','GR','DEF','MED','AV'].map(o=>`<option value="${o}">${o||'Posição'}</option>`).join('')}</select><button class="btn pri" type="submit">Adicionar</button></form>
-   <p class="note" style="margin:10px 0 0">O jogador com posição GR recebe automaticamente as defesas do guarda-redes no registo ao vivo. Remover um jogador não apaga as acções dele em jogos já registados.</p>`:''}
+   <p class="note" style="margin:10px 0 0">Carregue em "Ficha" para ver e editar a ficha completa do jogador (foto, dados, estado físico, estatísticas e avaliação técnica). Remover um jogador não apaga as acções dele em jogos já registados.</p>`:''}
   </section></div>`;
 }
 
@@ -1000,6 +1140,9 @@ document.addEventListener('click', async ev=>{
     for(const p of players().filter(p=>p.active!==false)){ if(c[p.id]) continue; if(nB<MAX_BENCH){ c[p.id]='B'; nB++; } else left++; }
     if(left) toast(`Banco completo (${MAX_BENCH}). ${left} jogador(es) ficaram fora.`); cuRefresh(); return; }
   else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else { if(lu.bench.length>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes no banco.`); return; } lu.bench.push(d.lubench); } S.luOpen=true; touch(m); render(); }
+  else if(d.ficha){ S.playerId=d.ficha; S.fichaEdit=false; location.hash='#jogador'; render(); }
+  else if(d.fichaedit!==undefined){ S.fichaEdit=true; render(); }
+  else if(d.fichacancel!==undefined){ S.fichaEdit=false; render(); }
   else if(d.autom){ S.autoM=d.autom; render(); }
   else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
   else if(d.openscope){ S.cur=d.openscope; S.scope='jogo'; render(); }
@@ -1065,6 +1208,16 @@ document.addEventListener('submit', async ev=>{
     S.admin.loaded=false; say('admin','Clube criado: '+club.name+'.'+extra); return;
   }
   if(f.id==='selfForm'){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; am.self=Object.assign({ratings:{}},am.self||{},selfDraft(),{at:Date.now(),by:S.profile.full_name||S.profile.email}); touch(am); toast('Avaliação gravada.'); render(); return; }
+  if(f.id==='fichaForm'){
+    const p=S.players.find(x=>x.id===S.playerId); if(!p) return; const v=k=>$('pf-'+k)?$('pf-'+k).value.trim():'';
+    const num=k=>v(k)===''?null:parseInt(v(k)), dt=k=>v(k)||null;
+    const attrs={}; document.querySelectorAll('[id^="pa-"]').forEach(el=>{ const n=+el.value; if(n>0) attrs[el.id.slice(3)]=n; });
+    const upd={name:v('name')||p.name,full_name:v('full_name'),num:v('num'),pos:v('pos'),pos2:v('pos2'),birth_date:dt('birth_date'),nationality:v('nationality'),foot:v('foot'),
+      height_cm:num('height_cm'),weight_kg:num('weight_kg'),joined:dt('joined'),contract_until:dt('contract_until'),status:v('status')||'disponivel',status_until:dt('status_until'),status_note:v('status_note'),notes:$('pf-notes').value,attrs};
+    const { error }=await sb.from('players').update(upd).eq('id',p.id);
+    if(error){ toast('Não foi possível gravar: '+error.message); return; }
+    Object.assign(p,upd); S.fichaEdit=false; toast('Ficha gravada.'); render(); return;
+  }
   if(f.id==='fName'){ const { error }=await sb.from('profiles').update({full_name:g('me-name')}).eq('user_id',S.session.user.id); if(error) say('conta',error.message,true); else { S.profile.full_name=g('me-name'); say('conta','Nome gravado.'); } return; }
   if(f.id==='fPass'){
     const btn=f.querySelector('button'); btn.disabled=true; btn.textContent='A gravar…';
@@ -1086,6 +1239,14 @@ document.addEventListener('change', async ev=>{
     else if(d.luslot!==undefined){ const k=+d.luslot, v=el.value||null; const j=lu.slots.indexOf(v); if(v&&j>=0&&j!==k) lu.slots[j]=lu.slots[k]||null; lu.slots[k]=v; }
     else { lu.override=lu.override||{}; if(el.value==='') delete lu.override[d.luov]; else lu.override[d.luov]=Math.max(0,Math.min(10,+el.value)); }
     touch(m); render(); return; }
+  if(d.photo&&el.files&&el.files[0]){
+    const p=S.players.find(x=>x.id===d.photo); toast('A carregar a foto…');
+    try{ const blob=await resizeImage(el.files[0]); const path=`${S.club.id}/${p.id}.jpg`;
+      const { error }=await sb.storage.from('player-photos').upload(path,blob,{upsert:true,contentType:'image/jpeg'}); if(error) throw error;
+      await sb.from('players').update({photo_path:path}).eq('id',p.id); p.photo_path=path;
+      const { data }=await sb.storage.from('player-photos').createSignedUrl(path,3600); S.photos[p.id]=data.signedUrl+'&t='+Date.now(); toast('Foto gravada.'); render();
+    }catch(e){ toast('Não foi possível carregar a foto: '+(e.message||e)); }
+    return; }
   if(el.id==='cuForm'){ const nT=Object.values(S.callup||{}).filter(v=>v==='T').length, n=Math.min(MAX_TIT,formSize(el.value));
     if(nT>n){ toast(`A formação ${el.value} só tem ${n} lugares e já há ${nT} titulares. Retire ${nT-n} titular(es) primeiro.`); el.value=S.cuForm; return; }
     S.cuForm=el.value; cuRefresh(); return; }
