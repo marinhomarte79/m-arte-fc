@@ -663,6 +663,43 @@ function radarPv(axes){
     ${axes.map((a,i)=>{ const [x,y]=P(i,a.v); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="var(--lv-us)"><title>${a.l}: ${a.txt}</title></circle>`; }).join('')}</svg>
     <div class="legend" style="justify-content:center"><span><i style="background:var(--lv-us)"></i>Jogador</span><span><i style="background:var(--lv-opp)"></i>Média da equipa</span></div>`;
 }
+const INFO_G=[
+  ['Dados pessoais',[['naturalidade','Naturalidade'],['doc_num','Nº do documento (CC / passaporte)'],['doc_val','Documento válido até','date'],['nif','NIF'],['profissao','Escola / profissão']]],
+  ['Contactos',[['tel','Telemóvel','tel'],['email','Email','email'],['morada','Morada'],['cp','Código postal'],['localidade','Localidade']]],
+  ['Encarregado de educação',[['ee_nome','Nome'],['ee_rel','Parentesco'],['ee_tel','Telemóvel','tel'],['ee_email','Email','email']]],
+  ['Desportivo',[['licenca','Nº de licença / inscrição'],['clube_ant','Clube anterior'],['agente','Empresário / agente'],['equip','Tamanho do equipamento'],['calcado','Nº de calçado']]],
+  ['Saúde e seguro',[['exame_val','Exame médico válido até','date'],['seguro','Seguro desportivo (apólice)'],['seguro_val','Seguro válido até','date'],['sangue','Grupo sanguíneo'],['alergias','Alergias / observações médicas'],['emerg_nome','Contacto de emergência'],['emerg_tel','Telefone de emergência','tel']]],
+];
+function infoAlerts(p){
+  const I=p.info||{}, out=[], now=today(), soon=new Date(Date.now()+30*864e5).toISOString().slice(0,10);
+  for(const [d,l] of [[I.exame_val,'Exame médico'],[I.seguro_val,'Seguro desportivo'],[I.doc_val,'Documento de identificação'],[p.contract_until,'Vínculo ao clube']]){
+    if(!d) continue; if(d<now) out.push(['bad',`${l} caducado desde ${fmtDate(d)}`]); else if(d<=soon) out.push(['warn',`${l} caduca a ${fmtDate(d)}`]); }
+  return out;
+}
+function infoFill(p){
+  const I=p.info||{}, base=['full_name','birth_date','nationality','foot','height_cm','weight_kg','joined','num','pos'];
+  const keys=INFO_G.flatMap(([g,l])=>g==='Encarregado de educação'&&!(ageOf(p.birth_date)!=null&&ageOf(p.birth_date)<18)?[]:l.map(x=>x[0]));
+  const filled=base.filter(k=>p[k]!=null&&p[k]!=='').length+keys.filter(k=>I[k]).length;
+  return Math.round(filled/(base.length+keys.length)*100);
+}
+function vFichaCompleta(p,ed){
+  const I=p.info||{}, age=ageOf(p.birth_date), full=ed||isAdmin(), al=infoAlerts(p), pct=infoFill(p);
+  const f=(l,v)=>`<div class="fc-f"><span>${l}</span><b>${v!=null&&v!==''?v:'<i>—</i>'}</b></div>`;
+  const val=(k,type)=>I[k]?(type==='date'?esc(fmtDate(I[k])):esc(I[k])):'';
+  const grp=(t,rows)=>`<div class="fc-g"><h3>${t}</h3><div class="fc-rows">${rows.join('')}</div></div>`;
+  const G=Object.fromEntries(INFO_G.map(([g,l])=>[g,l]));
+  const gen=g=>G[g].map(([k,l,t])=>f(l,val(k,t)));
+  const groups=[];
+  if(full) groups.push(grp('Dados pessoais',[f('Nome completo',esc(p.full_name||p.name)),f('Data de nascimento',p.birth_date?esc(fmtDate(p.birth_date))+(age!=null?` (${age} anos)`:''):''),f('Nacionalidade',esc(p.nationality||'')),...gen('Dados pessoais')]));
+  groups.push(grp('Desportivo',[f('Número',esc(p.num||'')),f('Posição',esc(POS_L[p.pos||'']||'')),f('Posição específica',esc(p.pos2||'')),f('Pé preferido',esc(p.foot||'')),f('Altura',p.height_cm?p.height_cm+' cm':''),f('Peso',p.weight_kg?p.weight_kg+' kg':''),f('No clube desde',esc(fmtDate(p.joined))),f('Vínculo até',esc(fmtDate(p.contract_until))),f('Estado',(STATUS[p.status||'disponivel']||STATUS.disponivel)[0]),...gen('Desportivo')]));
+  if(full){ groups.push(grp('Contactos',gen('Contactos')));
+    if((age!=null&&age<18)||G['Encarregado de educação'].some(([k])=>I[k])) groups.push(grp('Encarregado de educação',gen('Encarregado de educação')));
+    groups.push(grp('Saúde e seguro',gen('Saúde e seguro'))); }
+  return `<section class="card fc" id="fichaCompleta"><div class="lv-h"><h2>Ficha completa</h2><div class="row" style="gap:8px">${full?`<span class="fc-pct" title="Campos preenchidos"><i style="width:${pct}%"></i><em>${pct}% preenchida</em></span>`:''}<button class="btn sm no-print" data-print>Imprimir ficha</button>${ed&&!S.fichaEdit?'<button class="btn sm pri no-print" data-fichaedit>Completar ficha</button>':''}</div></div>
+    ${al.length&&full?`<div class="fc-al">${al.map(([c,t])=>`<span class="fc-a ${c}">${esc(t)}</span>`).join('')}</div>`:''}
+    <div class="fc-grid">${groups.join('')}</div>
+    ${!full?'<p class="note">Os contactos, documentos e dados de saúde só são visíveis para a equipa técnica.</p>':''}</section>`;
+}
 const HEAT_T=[['all','Todas'],['rec','Recuperações'],['perda','Perdas'],['pe','Passes errados'],['falta','Faltas'],['shot','Remates']];
 function vJogador(){
   const p=S.players.find(x=>x.id===S.playerId), ed=canEdit(), E=ed&&S.fichaEdit;
@@ -731,10 +768,12 @@ function vJogador(){
     <label class="fl">Regresso previsto${inp('status_until','date')}</label>
     <label class="fl" style="grid-column:1/-1">Nota sobre o estado (lesão, castigo…)${inp('status_note')}</label>
     <div class="pf-attr-ed" style="grid-column:1/-1">${groups.map(([g,list])=>`<div><div class="sec-h">${g}</div>${list.map(([k,l])=>`<label class="pf-ar"><span>${l}</span><input type="range" min="0" max="10" step="1" id="pa-${k}" value="${A[k]||0}" oninput="this.nextElementSibling.textContent=this.value>0?this.value:'—'"><b>${A[k]||'—'}</b></label>`).join('')}</div>`).join('')}</div>
+    ${INFO_G.map(([g,list])=>`<div class="sec-h fc-eh" style="grid-column:1/-1">${g}</div>${list.map(([k,l,t])=>`<label class="fl" ${k==='morada'||k==='alergias'?'style="grid-column:span 2"':''}>${l}<input class="inp" id="pi-${k}" type="${t||'text'}" value="${esc((p.info||{})[k]||'')}" ${t==='tel'?'inputmode="tel" autocomplete="off"':''}></label>`).join('')}`).join('')}
     <label class="fl" style="grid-column:1/-1">Observações e plano de desenvolvimento<textarea class="inp" id="pf-notes" rows="3">${esc(p.notes||'')}</textarea></label>
     <div class="row" style="grid-column:1/-1"><button class="btn pri" type="submit">Gravar ficha</button><button class="btn" type="button" data-fichacancel>Cancelar</button></div>
   </form></section>`:''}
   ${p.status&&p.status!=='disponivel'&&p.status_note?`<div class="banner">${esc(STATUS[p.status][0])}: ${esc(p.status_note)}</div>`:''}
+  ${vFichaCompleta(p,ed)}
   <div class="pv-maps">
     <section class="card"><div class="lv-h"><h2>Mapa de remates</h2><span class="muted">${shots.length} remate(s) · ${golos} golo(s)</span></div>
       <div class="pv-pitch">${shotMap}</div>
@@ -758,8 +797,7 @@ function vJogador(){
   </section>
   <section class="card"><h2>Evolução da nota</h2>${ratingLine(games)}</section>
   <div>
-    <section class="card"><h2>Dados do jogador</h2><div class="pf-facts" style="margin:0">
-      ${[['Nome completo',esc(p.full_name)],['Posição',esc(POS_L[p.pos||''])],['Posição específica',esc(p.pos2)],['Pé preferido',esc(p.foot)],['Altura',p.height_cm?p.height_cm+' cm':''],['Peso',p.weight_kg?p.weight_kg+' kg':''],['No clube desde',fmtDate(p.joined)],['Vínculo até',fmtDate(p.contract_until)],['Estado',(STATUS[p.status||'disponivel']||STATUS.disponivel)[0]]].map(([l,v])=>`<div class="pf-f"><span>${l}</span><b>${v||'—'}</b></div>`).join('')}</div></section>
+
   </div>
   <section class="card"><h2>Jogos na época</h2><div class="tscroll"><table class="st"><thead><tr><th class="l">Data</th><th class="l">Jogo</th><th>Estatuto</th><th>Min.</th><th>Nota</th><th>Rec.</th><th>Perdas</th><th>P. err.</th><th>Remates</th><th>Golos</th><th>Cartões</th></tr></thead><tbody>
     ${[...games].reverse().map(g=>g.played?`<tr><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>${g.started?'Titular':g.sub?'Suplente':'—'}</td><td>${g.min??'—'}</td><td>${g.r!=null?`<span class="rt ${rtCls(g.r)}">${f1r(g.r)}</span>`:'—'}</td><td>${g.rec}</td><td>${g.perda}</td><td>${g.pe}</td><td>${g.shots}</td><td>${g.golos||''}</td><td>${g.am?'🟨'.repeat(g.am):''}${g.vm?'🟥':''}</td></tr>`:`<tr class="muted"><td class="l">${esc(fmtDate(g.m.date))}</td><td class="l">vs ${esc(g.m.opp)}</td><td>Banco (não utilizado)</td><td colspan="8"></td></tr>`).join('')||'<tr><td class="l muted" colspan="11">Sem jogos neste período.</td></tr>'}
@@ -1367,6 +1405,7 @@ document.addEventListener('click', async ev=>{
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
   else if(d.pfpos!==undefined){ S.pfPos=d.pfpos; render(); }
+  else if(d.print!==undefined){ document.body.classList.add('print-ficha'); window.print(); setTimeout(()=>document.body.classList.remove('print-ficha'),500); }
   else if(d.delphoto){ const p=S.players.find(x=>x.id===d.delphoto); if(!p||!canEdit()) return;
     if(S.confirm!=='photo'+p.id){ S.confirm='photo'+p.id; t.textContent='Confirmar remoção?'; setTimeout(()=>{ if(S.confirm==='photo'+p.id){ S.confirm=null; render(); } },3500); return; }
     S.confirm=null; const path=p.photo_path; const { error }=await sb.from('players').update({photo_path:null}).eq('id',p.id);
@@ -1386,7 +1425,7 @@ document.addEventListener('click', async ev=>{
     if(left) toast(`Banco completo (${MAX_BENCH}). ${left} jogador(es) ficaram fora.`); cuRefresh(); return; }
   else if(d.lubench){ const m=M(); if(!m||matchRO(m)) return; const lu=luChange(m); lu.bench=lu.bench||[]; const i=lu.bench.indexOf(d.lubench); if(i>=0) lu.bench.splice(i,1); else { if(lu.bench.length>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes no banco.`); return; } lu.bench.push(d.lubench); } S.luOpen=true; touch(m); render(); }
   else if(d.ficha){ S.playerId=d.ficha; S.fichaEdit=false; location.hash='#jogador'; render(); window.scrollTo({top:0,behavior:'smooth'}); }
-  else if(d.fichaedit!==undefined){ S.fichaEdit=true; render(); }
+  else if(d.fichaedit!==undefined){ S.fichaEdit=true; render(); const fm=$('fichaForm'); if(fm) fm.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); }
   else if(d.fichacancel!==undefined){ S.fichaEdit=false; render(); }
   else if(d.autom){ S.autoM=d.autom; render(); }
   else if(d.rate){ const am=S.matches[S.autoM]; if(!am||matchRO(am)) return; const draft=selfDraft(); am.self=Object.assign({},am.self||{},draft); am.self.ratings=Object.assign({},(am.self&&am.self.ratings)||{}); am.self.ratings[d.rate]=+d.n; render(); }
@@ -1459,6 +1498,7 @@ document.addEventListener('submit', async ev=>{
     const attrs={}; document.querySelectorAll('[id^="pa-"]').forEach(el=>{ const n=+el.value; if(n>0) attrs[el.id.slice(3)]=n; });
     const upd={name:v('name')||p.name,full_name:v('full_name'),num:v('num'),pos:v('pos'),pos2:v('pos2'),birth_date:dt('birth_date'),nationality:v('nationality'),foot:v('foot'),
       height_cm:num('height_cm'),weight_kg:num('weight_kg'),joined:dt('joined'),contract_until:dt('contract_until'),status:v('status')||'disponivel',status_until:dt('status_until'),status_note:v('status_note'),notes:$('pf-notes').value,attrs};
+    const info={...(p.info||{})}; document.querySelectorAll('[id^="pi-"]').forEach(el=>{ const k=el.id.slice(3), x=el.value.trim(); if(x) info[k]=x; else delete info[k]; }); upd.info=info;
     const { error }=await sb.from('players').update(upd).eq('id',p.id);
     if(error){ toast('Não foi possível gravar: '+error.message); return; }
     Object.assign(p,upd); S.fichaEdit=false; toast('Ficha gravada.'); render(); return;
