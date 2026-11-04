@@ -1132,6 +1132,8 @@ function vLogin(){
 function vRegisto(m){
   const ro=matchRO(m), st=curStep(), pd=S.pending, p=possNow(m), pt=p.us+p.opp, sc=score(m), ended=m.status==='terminado';
   const side=pd?(ACT[pd.type].opp?'opp':'us'):(S.side||'us');
+  S.lu11Open=S.lu11Open||{}; const luOpen=S.lu11Open[m.id]!=null?S.lu11Open[m.id]:(!m.lineup&&!m.events.length&&!ro&&players().length>0);
+  const nTit=m.lineup?(m.lineup.slots||[]).filter(Boolean).length:0;
   const preOk=S.preLoc&&S.preLoc.mid===m.id, prePl=S.prePl&&S.prePl.mid===m.id?S.prePl.id:null;
   const marks=markersFor(m);
   if(pd&&pd.e.x!=null) marks.push({x:pd.e.x,y:pd.e.y,c:'#fff',r:1.6});
@@ -1143,6 +1145,7 @@ function vRegisto(m){
     <div class="lv-sb">${clubLogo('md')}<span class="tm us">${esc(m.home)}</span><span class="sc num" id="lvScore">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="tm opp">${esc(m.opp)}</span>${oppLogo(m.opp,'md')}</div>
     <div class="lv-clock">
       ${canEdit()?'<button class="btn sm lv-newm" data-newmatch>+ Novo jogo</button>':''}
+      <button class="btn sm lv-onze ${luOpen?'on':''}" data-lu11 aria-expanded="${luOpen}">Onze e banco${m.lineup?` · ${nTit}`:''}</button>
       <span class="ld ${m.clock.running?'on':''}"></span><span class="t num" id="liveClock">${fmtClock(elapsed(m))}</span>
       <span class="per">${ended?'Terminado':m.clock.half+'.ª parte'}</span>
       <button class="btn sm" data-clkadj="-60" ${ro||ended?'disabled':''} aria-label="Recuar um minuto">−1′</button>
@@ -1222,7 +1225,7 @@ function vRegisto(m){
   const log=`<section class="card lv-log"><div class="lv-h"><h2>Eventos <span class="pill">${m.events.length}</span></h2></div>
     <ul class="log">${m.events.length?[...m.events].reverse().slice(0,150).map(e=>logItem(m,e,ro)).join(''):'<li class="muted" style="display:block">Nenhuma acção registada. Toque no campo ou escolha uma acção para registar a primeira.</li>'}</ul></section>`;
 
-  return `<div class="lv ${ro?'readonly':''}">${bar}<div class="lv-grid"><div class="lv-col">${pitch}${log}</div><div class="lv-col">${panel}${stats}</div></div></div>`;
+  return `<div class="lv ${ro?'readonly':''}">${bar}${luOpen?vOnze(m):''}<div class="lv-grid"><div class="lv-col">${pitch}${log}</div><div class="lv-col">${panel}${stats}</div></div></div>`;
 }
 const short = n => { n=String(n||''); return n.length>10?n.split(' ')[0]:n; };
 function logItem(m,e,ro){
@@ -1381,6 +1384,58 @@ function vJogos(){
     <div class="cu" style="grid-column:1/-1">${vCallup()}</div>
     <div style="display:flex;align-items:flex-end;grid-column:1/-1"><button class="btn pri" type="submit">Criar e começar registo</button></div></form></section>`:''}
   </div>`;
+}
+/* ---------- onze inicial e banco (no registo ao vivo) ---------- */
+function luMarks(formation){
+  const lines=formation.split('-').map(Number), L=lines.length, out=[{i:0,x:50,y:91,lab:'GR'}]; let idx=1;
+  lines.forEach((n,li)=>{ const y=L===1?50:74-li*(58/Math.max(1,L-1)); for(let k=0;k<n;k++){ out.push({i:idx,x:(k+1)/(n+1)*100,y,lab:li===0?'DEF':li===L-1?'AV':'MED'}); idx++; } });
+  return out;
+}
+function vOnze(m){
+  const ro=matchRO(m), lu=lineupOf(m), slots=lu.slots||[], bench=(lu.bench||[]).filter(id=>!slots.includes(id));
+  const pl=id=>S.players.find(p=>p.id===id), nT=slots.filter(Boolean).length, need=formSize(lu.formation);
+  const ps=players().filter(p=>p.active!==false||slots.includes(p.id)||bench.includes(p.id)).sort((a,b)=>({GR:0,DEF:1,MED:2,AV:3}[a.pos]??2)-({GR:0,DEF:1,MED:2,AV:3}[b.pos]??2)||(+a.num||99)-(+b.num||99));
+  const st=id=>slots.includes(id)?'T':bench.includes(id)?'B':'';
+  const marks=luMarks(lu.formation);
+  const gkOk=slots[0]&&(pl(slots[0])||{}).pos==='GR';
+  return `<section class="card lu11" id="lu11">
+    <div class="lv-h"><h2>Onze inicial e banco</h2><div class="row" style="gap:8px">
+      <span class="pill ${nT===need?'ok':''}">Titulares ${nT}/${need}</span><span class="pill">Banco ${bench.length}/${MAX_BENCH}</span>
+      ${lu.auto?'<span class="pill warn">Ainda não escolhido</span>':''}<button class="btn sm" data-lu11>Fechar</button></div></div>
+    <div class="lu11-grid">
+      <div>
+        <div class="row" style="gap:10px;margin-bottom:10px"><label class="fl" style="width:160px">Formação<select class="inp" data-luform ${ro?'disabled':''}>${FORMS.map(f=>`<option ${f===lu.formation?'selected':''}>${f}</option>`).join('')}</select></label>
+          ${ro?'':`<button type="button" class="btn sm" data-luclear>Limpar onze</button>`}</div>
+        <div class="lineup lu11-pitch">${pitchVertical()}
+          ${marks.map(mk=>{ const id=slots[mk.i], p=id&&pl(id), sel=S.luSel===mk.i; return `<button type="button" class="lp lu-slot ${p?'':'empty'} ${sel?'sel':''}" style="left:${mk.x}%;top:${mk.y}%" data-luslot2="${mk.i}" ${ro?'disabled':''} aria-label="${p?esc(p.name):'Lugar vazio '+mk.lab}"><span class="lp-shirt">${p?esc(p.num||initials(p.name)):'+'}</span><span class="lp-name">${p?esc(p.name.split(' ').slice(-1)[0]):mk.lab}</span></button>`; }).join('')}
+        </div>
+        <p class="note" style="margin:8px 0 0">${S.luSel!=null?'<b>Escolha o lugar para onde quer mover o jogador</b> (ou toque de novo para cancelar).':'Toque num jogador no campo e depois noutro lugar para trocar posições. O guarda-redes fica sempre no lugar de baixo.'}${!gkOk&&nT?' <b class="warn-t">Sem guarda-redes no lugar de GR.</b>':''}</p>
+        ${bench.length?`<div class="sec-h" style="margin:12px 0 6px">Banco</div><div class="chips">${bench.map(id=>{ const p=pl(id); return p?`<span class="pill">${esc(p.num?p.num+' ':'')}${esc(p.name)}</span>`:''; }).join('')}</div>`:''}
+      </div>
+      <div class="lu11-list">
+        <div class="lu11-h"><span>Jogador</span><span>Titular · Banco · Fora</span></div>
+        ${ps.map(p=>`<div class="lu11-row ${st(p.id)==='T'?'t':st(p.id)==='B'?'b':''}"><span class="mono muted">${esc(p.num||'')}</span><span class="nm"><b>${esc(p.name)}</b>${p.pos?` <span class="role">${esc(p.pos)}</span>`:''}${p.status&&p.status!=='disponivel'?` ${statusPill(p)}`:''}</span>
+          <span class="seg">${[['T','Titular'],['B','Banco'],['','Fora']].map(([k,l])=>`<button type="button" aria-pressed="${st(p.id)===k}" data-luset="${p.id}" data-lv="${k}" ${ro?'disabled':''}>${l}</button>`).join('')}</span></div>`).join('')||'<p class="note">O plantel está vazio. Adicione jogadores no separador Plantel.</p>'}
+      </div>
+    </div>
+  </section>`;
+}
+function luSet(m,id,v){
+  const lu=luChange(m); const wasB=(lu.bench||[]).includes(id); lu.bench=(lu.bench||[]).filter(x=>x!==id);
+  const i=lu.slots.indexOf(id); if(i>=0) lu.slots[i]=null;
+  if(v==='T'){
+    const p=S.players.find(x=>x.id===id)||{};
+    let k=-1;
+    if(p.pos==='GR'&&!lu.slots[0]) k=0;
+    else { const mk=luMarks(lu.formation); const want=p.pos==='DEF'?'DEF':p.pos==='AV'?'AV':p.pos==='MED'?'MED':null;
+      k=mk.findIndex(x=>x.i>0&&!lu.slots[x.i]&&(!want||x.lab===want)); if(k<0) k=mk.findIndex(x=>x.i>0&&!lu.slots[x.i]); if(k<0&&!lu.slots[0]) k=0; }
+    if(k<0){ if(i>=0) lu.slots[i]=id; if(wasB) lu.bench.push(id); toast(`O onze já está completo (${formSize(lu.formation)}). Passe alguém ao banco primeiro.`); return; }
+    lu.slots[k]=id;
+  } else if(v==='B'){
+    if(lu.bench.length>=MAX_BENCH){ toast(`Máximo de ${MAX_BENCH} suplentes.`); return; }
+    lu.bench.push(id);
+  }
+  touch(m);
 }
 function focusNewMatch(){ S.focusNew=false; const f=$('newMatch'); if(!f) return; f.closest('section').scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); setTimeout(()=>{ const o=$('nm-opp'); if(o) o.focus({preventScroll:true}); },350); }
 function vCallup(){
@@ -1621,6 +1676,14 @@ document.addEventListener('click', async ev=>{
   else if(d.mh){ S.mapHalf=d.mh; render(); }
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
+  else if(d.lu11!==undefined){ const m=M(); if(!m) return; S.lu11Open=S.lu11Open||{}; const cur=S.lu11Open[m.id]!=null?S.lu11Open[m.id]:(!m.lineup&&!m.events.length&&!matchRO(m)&&players().length>0); S.lu11Open[m.id]=!cur; S.luSel=null; render(); if(!cur){ const c=$('lu11'); if(c) c.scrollIntoView({block:'start',behavior:'smooth'}); } }
+  else if(d.luset){ const m=M(); if(!m||matchRO(m)) return; luSet(m,d.luset,d.lv||''); S.luSel=null; render(); }
+  else if(d.luslot2!==undefined){ const m=M(); if(!m||matchRO(m)) return; const k=+d.luslot2;
+    if(S.luSel==null){ if(!(lineupOf(m).slots||[])[k]){ toast('Lugar vazio: escolha "Titular" num jogador da lista.'); return; } S.luSel=k; }
+    else if(S.luSel===k) S.luSel=null;
+    else { const lu=luChange(m), a=S.luSel; [lu.slots[a],lu.slots[k]]=[lu.slots[k]||null,lu.slots[a]||null]; S.luSel=null; touch(m); }
+    render(); }
+  else if(d.luclear!==undefined){ const m=M(); if(!m||matchRO(m)) return; if(S.confirm!=='luclr'){ S.confirm='luclr'; t.textContent='Confirmar?'; setTimeout(()=>{ if(S.confirm==='luclr'){ S.confirm=null; render(); } },3000); return; } S.confirm=null; const lu=luChange(m); lu.slots=lu.slots.map(()=>null); lu.bench=[]; touch(m); render(); }
   else if(d.newmatch!==undefined){ S.focusNew=true; if(view()==='jogos') focusNewMatch(); else location.hash='#jogos'; }
   else if(d.pdf!==undefined){ makePdf(M()); }
   else if(d.dellogo){ if(S.confirm!=='lg'+d.dellogo+(d.name||'')){ S.confirm='lg'+d.dellogo+(d.name||''); t.textContent='Confirmar remoção?'; setTimeout(()=>{ if(S.confirm==='lg'+d.dellogo+(d.name||'')){ S.confirm=null; render(); } },3500); return; } S.confirm=null; removeLogo(d.dellogo,d.name); }

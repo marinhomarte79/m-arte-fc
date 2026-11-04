@@ -1080,3 +1080,30 @@ main.gut{min-width:0;width:100%}
 .card:has(#newMatch){scroll-margin-top:calc(var(--hdrH,0px) + 12px)}
 .lv-newm{border-color:rgba(76,195,255,.45)!important;color:var(--lv-us)!important;font-weight:700}
 @media (max-width:760px){.lv-newm{order:9}}
+
+/* ---- onze inicial e banco ---- */
+.lv-onze{font-weight:700}
+.lv-onze.on{background:rgba(76,195,255,.15)!important;border-color:var(--lv-us)!important;color:var(--lv-us)!important}
+.lu11{scroll-margin-top:calc(var(--hdrH,0px) + 12px)}
+.lu11 .pill.ok{background:rgba(74,222,128,.18);color:var(--good)}
+.lu11 .pill.warn{background:rgba(245,158,11,.16);color:var(--warn)}
+.lu11-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:20px;align-items:start}
+.lu11-pitch{max-width:440px}
+.lu-slot{background:none;border:0;padding:0;color:inherit;cursor:pointer}
+.lu-slot:disabled{cursor:default}
+.lu-slot.sel .lp-shirt{background:var(--lv-opp)!important;box-shadow:0 0 0 4px rgba(255,162,76,.35)}
+.lu-slot.empty .lp-name{opacity:.7}
+.lu-slot:focus-visible{outline:none}.lu-slot:focus-visible .lp-shirt{outline:2px solid #fff;outline-offset:2px}
+.lu11-list{display:flex;flex-direction:column;max-height:620px;overflow:auto;border:var(--glass-b);border-radius:12px}
+.lu11-h{display:flex;justify-content:space-between;padding:8px 12px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card-solid,#0C111D);z-index:1}
+.lu11-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line)}
+.lu11-row:last-child{border-bottom:0}
+.lu11-row.t{background:rgba(76,195,255,.07)}.lu11-row.b{background:rgba(255,255,255,.025)}
+.lu11-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lu11-row .seg button{padding:6px 10px;font-size:12.5px}
+.lu11-row .seg button[aria-pressed="true"]{background:var(--lv-us);color:#04202D}
+.lu11-row .seg button[data-lv="B"][aria-pressed="true"]{background:#94A3B8;color:#0B1220}
+.lu11-row .seg button[data-lv=""][aria-pressed="true"]{background:rgba(255,255,255,.12);color:var(--ink)}
+.warn-t{color:var(--warn)}
+@media (max-width:900px){.lu11-grid{grid-template-columns:minmax(0,1fr)}.lu11-list{max-height:none}}
+@media (max-width:420px){.lu11-row{grid-template-columns:24px minmax(0,1fr)}.lu11-row .seg{grid-column:1/-1;justify-self:end}}
