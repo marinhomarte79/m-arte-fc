@@ -1107,3 +1107,12 @@ main.gut{min-width:0;width:100%}
 .warn-t{color:var(--warn)}
 @media (max-width:900px){.lu11-grid{grid-template-columns:minmax(0,1fr)}.lu11-list{max-height:none}}
 @media (max-width:420px){.lu11-row{grid-template-columns:24px minmax(0,1fr)}.lu11-row .seg{grid-column:1/-1;justify-self:end}}
+
+/* ---- fases do jogo ---- */
+.lv-ph{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lv-ph .confirm{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.lv-pause{min-width:104px;font-weight:700;background:rgba(250,204,21,.12)!important;border-color:rgba(250,204,21,.55)!important;color:#FACC15!important}
+.lv-stop{border-color:rgba(248,113,113,.55)!important;color:#F87171!important;font-weight:700}
+.lv-stop.pri{background:#EF4444!important;color:#fff!important;border-color:#EF4444!important}
+.per.ph-pre{color:var(--muted)}.per.ph-h1,.per.ph-h2{color:var(--good)}.per.ph-p1,.per.ph-p2,.per.ph-int{color:#FACC15}.per.ph-end{color:#F87171}
+@media (max-width:760px){.lv-ph{width:100%;justify-content:flex-end}}

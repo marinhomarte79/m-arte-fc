@@ -1129,8 +1129,23 @@ function vLogin(){
   </form></div>`;
 }
 
+const PHASE_L={pre:'Por começar',h1:'1.ª parte',p1:'1.ª parte · pausa',int:'Intervalo',h2:'2.ª parte',p2:'2.ª parte · pausa',end:'Terminado'};
+function phaseOf(m){ if(m.status==='terminado') return 'end'; const c=m.clock, t=elapsed(m);
+  if(c.half===1) return c.running?'h1':t>0?'p1':'pre';
+  return c.running?'h2':t>0?'p2':'int'; }
+function phaseButtons(m,ph,ro){
+  if(ph==='end') return `<button class="btn pri lv-go" data-pdf>Criar PDF do jogo</button>${ro?'':`<button class="btn sm" data-reopen>Reabrir jogo</button>`}`;
+  if(ro) return '';
+  const fin=S.confirm==='fin'+m.id?`<span class="confirm">Terminar o jogo? <button class="btn sm pri lv-stop" data-phase="fim">Sim, terminar</button><button class="btn sm" data-noconf>Não</button></span>`:`<button class="btn sm lv-stop" data-conf="fin${m.id}">■ Terminar jogo</button>`;
+  if(ph==='pre') return `<button class="btn pri lv-go" data-phase="start">▶ Início do jogo</button>`;
+  if(ph==='h1') return `<button class="btn lv-pause" data-phase="pause">❚❚ Pausa</button><button class="btn sm" data-phase="half">Fim da 1.ª parte</button>`;
+  if(ph==='p1') return `<button class="btn pri lv-go" data-phase="resume">▶ Retomar</button><button class="btn sm" data-phase="half">Fim da 1.ª parte</button>`;
+  if(ph==='int') return `<button class="btn pri lv-go" data-phase="start2">▶ Início da 2.ª parte</button>${fin}`;
+  if(ph==='h2') return `<button class="btn lv-pause" data-phase="pause">❚❚ Pausa</button>${fin}`;
+  return `<button class="btn pri lv-go" data-phase="resume">▶ Retomar</button>${fin}`;
+}
 function vRegisto(m){
-  const ro=matchRO(m), st=curStep(), pd=S.pending, p=possNow(m), pt=p.us+p.opp, sc=score(m), ended=m.status==='terminado';
+  const ro=matchRO(m), st=curStep(), pd=S.pending, p=possNow(m), pt=p.us+p.opp, sc=score(m), ended=m.status==='terminado', phase=phaseOf(m);
   const side=pd?(ACT[pd.type].opp?'opp':'us'):(S.side||'us');
   S.lu11Open=S.lu11Open||{}; const luOpen=S.lu11Open[m.id]!=null?S.lu11Open[m.id]:(!m.lineup&&!m.events.length&&!ro&&players().length>0);
   const nTit=m.lineup?(m.lineup.slots||[]).filter(Boolean).length:0;
@@ -1147,11 +1162,10 @@ function vRegisto(m){
       ${canEdit()?'<button class="btn sm lv-newm" data-newmatch>+ Novo jogo</button>':''}
       <button class="btn sm lv-onze ${luOpen?'on':''}" data-lu11 aria-expanded="${luOpen}">Onze e banco${m.lineup?` · ${nTit}`:''}</button>
       <span class="ld ${m.clock.running?'on':''}"></span><span class="t num" id="liveClock">${fmtClock(elapsed(m))}</span>
-      <span class="per">${ended?'Terminado':m.clock.half+'.ª parte'}</span>
+      <span class="per ph-${phase}">${PHASE_L[phase]}</span>
       <button class="btn sm" data-clkadj="-60" ${ro||ended?'disabled':''} aria-label="Recuar um minuto">−1′</button>
       <button class="btn sm" data-clkadj="60" ${ro||ended?'disabled':''} aria-label="Avançar um minuto">+1′</button>
-      <button class="btn sm" data-endhalf ${ro||ended?'disabled':''}>${m.clock.half===1?'Fim 1.ª parte':'Terminar jogo'}</button>
-      ${ended?'<button class="btn pri lv-go" data-pdf>Criar PDF do jogo</button>':`<button class="btn pri lv-go" data-clock ${ro?'disabled':''}>${m.clock.running?'Pausar':(elapsed(m)>0?'Retomar':'Iniciar')}</button>`}
+      <span class="lv-ph">${phaseButtons(m,phase,ro)}</span>
     </div>
     <div class="lv-poss"><span class="lab">Posse</span>
       <button class="us ${m.poss.cur==='us'?'on':''}" data-poss="us" ${ro?'disabled':''}>${esc(short(m.home))} <span class="num" id="posUs">${fmtClock(p.us)}</span></button>
@@ -1669,6 +1683,14 @@ document.addEventListener('click', async ev=>{
   else if(d.v){ stepValue(d.v,d.k); }
   else if(d.clock!==undefined){ if(!matchRO(m)) startPause(m); }
   else if(d.endhalf!==undefined){ if(!matchRO(m)) endHalf(m); }
+  else if(d.phase){ if(!m||matchRO(m)) return; const ph=phaseOf(m);
+    if(d.phase==='start'&&ph==='pre'){ startPause(m); toast('Jogo iniciado. Bom jogo!'); }
+    else if(d.phase==='pause'&&m.clock.running){ startPause(m); toast('Jogo em pausa.'); }
+    else if(d.phase==='resume'&&!m.clock.running){ startPause(m); toast('Jogo retomado.'); }
+    else if(d.phase==='half'&&m.clock.half===1){ endHalf(m); }
+    else if(d.phase==='start2'&&ph==='int'){ startPause(m); toast('Começou a 2.ª parte.'); }
+    else if(d.phase==='fim'){ S.confirm=null; if(m.clock.half===1){ if(m.clock.running) startPause(m); m.clock.half=2; } endHalf(m); } }
+  else if(d.reopen!==undefined){ if(!m||matchRO(m)) return; m.status='a decorrer'; touch(m); render(); toast('Jogo reaberto. Pode continuar a registar.'); }
   else if(d.poss){ if(!matchRO(m)) setPoss(m,d.poss); }
   else if(d.undo!==undefined) undo();
   else if(d.del) delEvent(d.del);
