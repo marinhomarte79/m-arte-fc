@@ -1076,3 +1076,7 @@ main.gut{min-width:0;width:100%}
 .ih-card{width:auto;min-width:58px}
 .ih-br .t i{min-width:34px}
 @media (max-width:700px){.ih-tabs{display:flex;overflow-x:auto;scrollbar-width:none}.ih-tabs button{flex:1 0 auto;padding:8px 10px;font-size:12px}.ih-pos{font-size:18px}}
+.jg-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card:has(#newMatch){scroll-margin-top:calc(var(--hdrH,0px) + 12px)}
+.lv-newm{border-color:rgba(76,195,255,.45)!important;color:var(--lv-us)!important;font-weight:700}
+@media (max-width:760px){.lv-newm{order:9}}

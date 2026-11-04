@@ -1094,6 +1094,7 @@ function render(){
   else if(v==='individual') app.innerHTML=vIndividual(m);
   const pv=$('livePitch'); if(pv) pv.addEventListener('click',pitchClick);
   const hd=$('hdr'); if(hd) document.documentElement.style.setProperty('--hdrH',hd.offsetHeight+'px');
+  if(S.focusNew&&$('newMatch')) focusNewMatch();
   if(S.scrollStep){ S.scrollStep=false; const q=document.querySelector('.lv-act'); if(q){ const r=q.getBoundingClientRect(); if(r.top<140||r.top>innerHeight*.5) q.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); } }
 }
 function renderHeader(){
@@ -1141,6 +1142,7 @@ function vRegisto(m){
   const bar=`<div class="lv-bar">
     <div class="lv-sb">${clubLogo('md')}<span class="tm us">${esc(m.home)}</span><span class="sc num" id="lvScore">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="tm opp">${esc(m.opp)}</span>${oppLogo(m.opp,'md')}</div>
     <div class="lv-clock">
+      ${canEdit()?'<button class="btn sm lv-newm" data-newmatch>+ Novo jogo</button>':''}
       <span class="ld ${m.clock.running?'on':''}"></span><span class="t num" id="liveClock">${fmtClock(elapsed(m))}</span>
       <span class="per">${ended?'Terminado':m.clock.half+'.ª parte'}</span>
       <button class="btn sm" data-clkadj="-60" ${ro||ended?'disabled':''} aria-label="Recuar um minuto">−1′</button>
@@ -1259,7 +1261,7 @@ function vAnalise(m){
     <div class="sp row">${scopeBar()}<button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`
   :`<div class="mhead"><div><h1 class="lg-h1">${clubLogo('md')}${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}${oppLogo(m.opp,'md')}</h1>
     <div class="meta">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''} · ${esc(S.team?S.team.name:'')} · ${m.events.length} acções${m.locked?' · trancado':''}${m.scoreUnknown&&!sc?' · resultado não registado':''}</div></div>
-    <div class="sp row">${scopeBar()}<button class="btn pri" data-pdf>Criar PDF do jogo</button><button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
+    <div class="sp row">${scopeBar()}${canEdit()?'<button class="btn" data-newmatch>+ Novo jogo</button>':''}<button class="btn pri" data-pdf>Criar PDF do jogo</button><button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
   ${m.note&&!m.season?`<div class="banner">${esc(m.note)}</div>`:''}
   <div class="kpis">
     <div class="kpi"><span>Posse</span><b>${s.poss!=null?s.poss+'%':'—'}</b><small>${s.poss!=null?'adv. '+(100-s.poss)+'%':'não cronometrada'}</small></div>
@@ -1362,7 +1364,7 @@ function vJogos(){
   const list=teamMatches();
   return `<div class="view">
   ${!list.length?`<div class="card empty"><h2>Ainda não há jogos</h2><p class="muted">${canEdit()?'Crie o primeiro jogo abaixo.':'Ainda não foram registados jogos desta equipa.'}</p></div>`:''}
-  ${list.length?`<section><div class="sec-h">Jogos · ${esc(S.team.name)} <span class="pill">${list.length}</span></div><div class="mlist">${list.map(m=>{ const sc=score(m); return `<div class="mcard ${m.id===S.cur?'cur':''}">
+  ${list.length?`<section><div class="sec-h jg-h">Jogos · ${esc(S.team.name)} <span class="pill">${list.length}</span><span class="sp"></span>${canEdit()?'<button class="btn pri" data-newmatch>+ Novo jogo</button>':''}</div><div class="mlist">${list.map(m=>{ const sc=score(m); return `<div class="mcard ${m.id===S.cur?'cur':''}">
     <span class="note">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''}</span><span class="t mc-t">${clubLogo('sm')}${esc(m.home)} <i>vs</i> ${oppLogo(m.opp,'sm')}${esc(m.opp)}</span>
     <div class="row"><span class="s">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="pill">${esc(m.status||'')}</span><span class="pill">${m.events.length} acções</span>${m.locked?'<span class="pill">Trancado</span>':''}</div>
     <div class="row">${m.id===S.cur?'<span class="pill" style="background:var(--acc);color:var(--on-red)">Jogo activo</span>':`<button class="btn sm pri" data-open="${m.id}">Abrir</button>`}
@@ -1380,6 +1382,7 @@ function vJogos(){
     <div style="display:flex;align-items:flex-end;grid-column:1/-1"><button class="btn pri" type="submit">Criar e começar registo</button></div></form></section>`:''}
   </div>`;
 }
+function focusNewMatch(){ S.focusNew=false; const f=$('newMatch'); if(!f) return; f.closest('section').scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); setTimeout(()=>{ const o=$('nm-opp'); if(o) o.focus({preventScroll:true}); },350); }
 function vCallup(){
   const ps=players().filter(p=>p.active!==false).sort((a,b)=>({GR:0,DEF:1,MED:2,AV:3}[a.pos]??2)-({GR:0,DEF:1,MED:2,AV:3}[b.pos]??2)||(+a.num||99)-(+b.num||99));
   S.callup=S.callup||{}; const c=S.callup, nT=ps.filter(p=>c[p.id]==='T').length, nB=ps.filter(p=>c[p.id]==='B').length;
@@ -1618,6 +1621,7 @@ document.addEventListener('click', async ev=>{
   else if(d.mh){ S.mapHalf=d.mh; render(); }
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
+  else if(d.newmatch!==undefined){ S.focusNew=true; if(view()==='jogos') focusNewMatch(); else location.hash='#jogos'; }
   else if(d.pdf!==undefined){ makePdf(M()); }
   else if(d.dellogo){ if(S.confirm!=='lg'+d.dellogo+(d.name||'')){ S.confirm='lg'+d.dellogo+(d.name||''); t.textContent='Confirmar remoção?'; setTimeout(()=>{ if(S.confirm==='lg'+d.dellogo+(d.name||'')){ S.confirm=null; render(); } },3500); return; } S.confirm=null; removeLogo(d.dellogo,d.name); }
   else if(d.pdfm){ makePdf(S.matches[d.pdfm]); }
