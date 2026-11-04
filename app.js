@@ -185,14 +185,15 @@ function endHalf(m){
 function begin(type){
   const m=M(); if(!m||matchRO(m)) return;
   S.pending={type,i:0,e:{id:uid(),type,half:m.clock.half,t:Math.round(elapsed(m))}};
-  if(S.preLoc && S.preLoc.mid===m.id && ACT[type].steps.includes('loc')){ const L=S.preLoc; S.pending.e.x=L.x; S.pending.e.y=L.y; S.pending.e.z=L.z; }
-  S.preLoc=null; numBuf='';
+  if(S.preLoc && S.preLoc.mid===m.id && (ACT[type].steps.includes('loc')||type==='remate_adv'||type==='golo_adv')){ const L=S.preLoc; S.pending.e.x=L.x; S.pending.e.y=L.y; S.pending.e.z=L.z; }
+  if(S.prePl && S.prePl.mid===m.id && ACT[type].steps.includes('player')){ const pl=S.players.find(x=>x.id===S.prePl.id); if(pl){ S.pending.e.p=pl.id; S.pending.e.pn=pl.name; S.pending.prePl=true; } }
+  S.preLoc=null; S.prePl=null; numBuf=''; S.side=ACT[type].opp?'opp':'us';
   if(matchMedia('(max-width:760px)').matches) S.scrollStep=true;
-  if(ACT[type].gk){ const gk=players().find(p=>p.pos==='GR'); if(gk){ S.pending.e.p=gk.id; S.pending.e.pn=gk.name; commit(); return; } }
+  if(ACT[type].gk&&!S.pending.prePl){ const gk=players().find(p=>p.pos==='GR'); if(gk){ S.pending.e.p=gk.id; S.pending.e.pn=gk.name; commit(); return; } }
   advance();
 }
 const curStep = () => S.pending ? ACT[S.pending.type].steps[S.pending.i] : null;
-function advance(){ const p=S.pending; if(p){ const st=ACT[p.type].steps; while(p.i<st.length&&st[p.i]==='loc'&&p.e.x!=null) p.i++; } numBuf='';
+function advance(){ const p=S.pending; if(p){ const st=ACT[p.type].steps; while(p.i<st.length&&((st[p.i]==='loc'&&p.e.x!=null)||(st[p.i]==='player'&&p.prePl))) p.i++; } numBuf='';
   if(p && p.i>=ACT[p.type].steps.length) commit(); else render(); }
 function stepValue(key,val){
   const p=S.pending; if(!p) return;
@@ -202,7 +203,7 @@ function stepValue(key,val){
   p.i++; advance();
 }
 function commit(){ const m=M(),e=S.pending.e; S.pending=null; S.lastId=e.id; S.lastAt=Date.now(); m.events.push(e); touch(m); toast(minuteLabel(m,e.half,e.t)+' · '+ACT[e.type].l+(e.p?' · '+pname(e):'')); render();
-  if(e.type==='golo'||e.type==='golo_adv'){ const sc=document.querySelector('#hdrScore .sc'); if(sc){ sc.classList.remove('flash'); void sc.offsetWidth; sc.classList.add('flash'); } } }
+  if(e.type==='golo'||e.type==='golo_adv'){ const sc=document.querySelector('#lvScore')||document.querySelector('#hdrScore .sc'); if(sc){ sc.classList.remove('flash'); void sc.offsetWidth; sc.classList.add('flash'); } } }
 let numBuf='', numT=null;
 const zoneOf = x => x<100/3?'def':x<200/3?'inter':'ofen';
 const STEP_L = {loc:'Local',player:'Jogador',player2:'Entra',corr:'Corredor',cons:'Consequência'};
@@ -222,7 +223,7 @@ function markersFor(m){
   const f=S.mf||'ult', has=e=>e.x!=null; let evs=m.events.filter(has);
   if(f==='ult') evs=evs.slice(-14); else if(f==='parte') evs=evs.filter(e=>e.half===m.clock.half); else if(f==='rem') evs=evs.filter(e=>isShot(e)||e.type==='remate_adv');
   const fresh=S.lastAt&&Date.now()-S.lastAt<1500;
-  return evs.map(e=>({x:e.x,y:e.y,c:ACT[e.type].c,cls:fresh&&e.id===S.lastId?'pop':'',t:minuteLabel(m,e.half,e.t)+' '+ACT[e.type].l+(e.p?' · '+pname(e):'')}));
+  return evs.map(e=>({x:e.x,y:e.y,c:ACT[e.type].opp?'var(--lv-opp)':ACT[e.type].c,cls:fresh&&e.id===S.lastId?'pop':'',t:minuteLabel(m,e.half,e.t)+' '+ACT[e.type].l+(e.p?' · '+pname(e):'')}));
 }
 function undo(){ const m=M(); if(!m||!m.events.length||matchRO(m)) return; const e=m.events.pop(); touch(m); toast('Anulado: '+ACT[e.type].l); render(); }
 function delEvent(id){ const m=M(); if(matchRO(m)) return; m.events=m.events.filter(e=>e.id!==id); touch(m); render(); }
@@ -263,7 +264,7 @@ function pitchClick(ev){
   const pre=!S.pending; if(!pre&&curStep()!=='loc') return; const m=M(); if(!m||matchRO(m)) return;
   const svg=ev.currentTarget,pt=svg.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; const p=pt.matrixTransform(svg.getScreenCTM().inverse());
   const L={x:+Math.min(100,Math.max(0,p.x/105*100)).toFixed(1),y:+Math.min(100,Math.max(0,p.y/68*100)).toFixed(1)};
-  if(pre){ L.z=zoneOf(L.x); L.mid=m.id; S.preLoc=L; render(); const q=document.querySelector('.live .step'); if(q&&matchMedia('(max-width:760px)').matches){ const r=q.getBoundingClientRect(); if(r.top<70||r.bottom>innerHeight) q.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); } return; }
+  if(pre){ L.z=zoneOf(L.x); L.mid=m.id; S.preLoc=L; render(); const q=document.querySelector('.lv-act'); if(q&&matchMedia('(max-width:760px)').matches){ const r=q.getBoundingClientRect(); if(r.top<140||r.top>innerHeight*.6) q.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); } return; }
   stepValue('loc',L); }
 
 /* =========================================================
@@ -868,7 +869,8 @@ function render(){
   else if(v==='analise') app.innerHTML=vAnalise(m);
   else if(v==='individual') app.innerHTML=vIndividual(m);
   const pv=$('livePitch'); if(pv) pv.addEventListener('click',pitchClick);
-  if(S.scrollStep){ S.scrollStep=false; const q=document.querySelector('.live .step'); if(q){ const r=q.getBoundingClientRect(); if(r.top<70||r.top>innerHeight*.5) q.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); } }
+  const hd=$('hdr'); if(hd) document.documentElement.style.setProperty('--hdrH',hd.offsetHeight+'px');
+  if(S.scrollStep){ S.scrollStep=false; const q=document.querySelector('.lv-act'); if(q){ const r=q.getBoundingClientRect(); if(r.top<140||r.top>innerHeight*.5) q.scrollIntoView({block:'start',behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'}); } }
 }
 function renderHeader(){
   const sc=$('selClub'), st=$('selTeam');
@@ -881,11 +883,11 @@ function renderHeader(){
   const r=myRole();
   $('hdrUser').innerHTML = `${esc(S.profile.full_name||S.profile.email)} <span class="role ${r==='super'?'super':r==='admin'?'admin':''}">${r==='super'?'Super-admin':ROLE_L[r]||'—'}</span>`;
   const m=M(), el=$('hdrScore');
-  if(!m||['admin','conta','clube'].includes(view())){ el.innerHTML=''; return; }
+  if(!m||['admin','conta','clube','registo'].includes(view())){ el.innerHTML=''; return; }
   const s=score(m);
   el.innerHTML=`<span class="tm">${esc(m.home)}</span><span class="sc">${s?s[0]+' – '+s[1]:'– : –'}</span><span class="tm">${esc(m.opp)}</span><span class="clock" id="hdrClock">${fmtClock(elapsed(m))}<small>${m.clock.half}ª P</small></span>`;
 }
-setInterval(()=>{ const m=M(); if(!m||!m.clock.running) return; const c=$('hdrClock'); if(c) c.innerHTML=fmtClock(elapsed(m))+`<small>${m.clock.half}ª P</small>`;
+setInterval(()=>{ const m=M(); if(!m||!m.clock.running) return; const lc=$('liveClock'); if(lc) lc.textContent=fmtClock(elapsed(m)); const c=$('hdrClock'); if(c) c.innerHTML=fmtClock(elapsed(m))+`<small>${m.clock.half}ª P</small>`;
   const p=possNow(m),pt=p.us+p.opp,a=$('posUs'),b=$('posOpp'),bar=$('posBar'); if(a) a.textContent=fmtClock(p.us); if(b) b.textContent=fmtClock(p.opp); if(bar&&pt) bar.style.width=(p.us/pt*100)+'%'; },500);
 
 function vLogin(){
@@ -902,55 +904,98 @@ function vLogin(){
 }
 
 function vRegisto(m){
-  const ro=matchRO(m), st=curStep(), pd=S.pending, p=possNow(m), pt=p.us+p.opp;
-  const evH=m.events.filter(e=>e.half===m.clock.half);
+  const ro=matchRO(m), st=curStep(), pd=S.pending, p=possNow(m), pt=p.us+p.opp, sc=score(m), ended=m.status==='terminado';
+  const side=pd?(ACT[pd.type].opp?'opp':'us'):(S.side||'us');
+  const preOk=S.preLoc&&S.preLoc.mid===m.id, prePl=S.prePl&&S.prePl.mid===m.id?S.prePl.id:null;
   const marks=markersFor(m);
   if(pd&&pd.e.x!=null) marks.push({x:pd.e.x,y:pd.e.y,c:'#fff',r:1.6});
-  const preOk=S.preLoc&&S.preLoc.mid===m.id;
-  if(!pd&&preOk) marks.push({x:S.preLoc.x,y:S.preLoc.y,c:'#fff',r:1.7,cls:'pre'});
-  let stepHtml='';
-  if(pd){ const a=ACT[pd.type]; let body='',prompt='';
-    const kb=(i)=>i<9?`<kbd>${i+1}</kbd>`:'';
-    if(st==='loc'){ prompt='Toque no campo onde aconteceu'; body=`<div class="chips"><button class="chip skip" data-skiploc>Sem localização</button></div>`; }
-    else if(st==='player'||st==='player2'){ prompt=(pd.type==='subst'?(st==='player'?'Quem sai?':'Quem entra?'):'Que jogador?')+' <span class="kbhint">ou escreva o número</span> <b class="numbuf" id="numBuf"></b>';
-      const pls=players().filter(x=>x.active!==false).sort((x,y)=>(y.pos==='GR'?1:0)-(x.pos==='GR'?1:0)||(+x.num||99)-(+y.num||99));
-      const chipB=pl=>`<button class="chip ${pl.pos==='GR'?'gk':''}" data-pl="${pl.id}"><span class="n">${esc(pl.num||'')}</span>${esc(pl.name)}</button>`;
-      const fs=fieldState(m);
-      if(!fs) body=`<div class="chips">${pls.map(chipB).join('')}<button class="chip skip" data-pl="">Sem jogador</button></div>`;
-      else { const onL=pls.filter(p=>fs.on.has(p.id)), bL=pls.filter(p=>fs.bench.has(p.id)), oL=pls.filter(p=>!fs.on.has(p.id)&&!fs.bench.has(p.id));
-        const grp=(t,l,open)=>l.length?`<div class="cu-grp"><span class="cu-lab">${t}</span><div class="chips">${l.map(chipB).join('')}</div></div>`:'';
-        if(pd.type==='subst'&&st==='player') body=grp('Em campo',onL)+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`;
-        else if(pd.type==='subst'&&st==='player2') body=grp('Banco',bL)+(oL.length?`<details><summary class="note">Outros jogadores do plantel</summary>${grp('',oL)}</details>`:'')+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`;
-        else body=grp('Em campo',onL)+`<div class="chips"><button class="chip skip" data-pl="">Sem jogador</button></div>`+((bL.length||oL.length)?`<details><summary class="note">Banco e outros</summary>${grp('Banco',bL)}${grp('Outros',oL)}</details>`:'');
-      } }
-    else if(st==='sub'){ prompt=pd.type==='ataque'?'Como terminou o ataque?':pd.type==='canto'?'Para onde foi o canto?':'Tipo de remate'; body=`<div class="chips">${a.subs.map(([k,l],i)=>`<button class="chip" data-v="sub" data-k="${k}">${kb(i)}${l}</button>`).join('')}</div>`; }
-    else if(st==='corr'){ prompt='Por que corredor?'; body=`<div class="chips">${CORR.map(([k,l],i)=>`<button class="chip" data-v="corr" data-k="${k}">${kb(i)}${l}</button>`).join('')}</div>`; }
-    else if(st==='cons'){ prompt='Consequência'; body=`<div class="chips">${CONS.map(([k,l],i)=>`<button class="chip ${k==='nada'?'skip':''}" data-v="cons" data-k="${k}">${kb(i)}${l}</button>`).join('')}</div>`; }
-    const trail=a.steps.map((k,i)=>{ const dn=i<pd.i||(k==='loc'&&pd.e.x!=null); return `<span class="tr ${dn?'done':i===pd.i?'on':''}"><i>${dn?'✓':i+1}</i>${stepName(pd.type,k)}${dn?`<small>${esc(stepDone(pd.type,k,pd.e))}</small>`:''}</span>`; }).join('<span class="tr-sep">›</span>');
-    stepHtml=`<div class="step"><div class="sh"><span class="pill">${minuteLabel(m,pd.e.half,pd.e.t)}</span><b>${a.l}</b><button class="btn sm ghost sp" data-cancel>Cancelar <kbd>Esc</kbd></button></div><div class="trail">${trail}</div><div class="prompt">${prompt}</div>${body}</div>`;
-  } else if(preOk && !ro){
-    const locActs=Object.keys(ACT).filter(k=>ACT[k].steps.includes('loc'));
-    stepHtml=`<div class="step"><div class="sh"><span class="pill">${minuteLabel(m,m.clock.half,elapsed(m))}</span><b>${ZN[S.preLoc.z]}</b><span class="muted">Local marcado. Que ação foi?</span><button class="btn sm ghost sp" data-clearloc>Limpar <kbd>Esc</kbd></button></div><div class="chips">${locActs.map(k=>`<button class="chip" data-act="${k}"><span class="dot" style="background:${ACT[k].c}"></span>${ACT[k].l}${ACT[k].k?`<kbd>${ACT[k].k}</kbd>`:''}</button>`).join('')}</div></div>`;
-  } else stepHtml = ro ? `<div class="lockbanner">${m.locked?'Jogo trancado pelo administrador do clube. Só é possível consultar.':'O seu perfil é só de leitura.'}</div>` : `<div class="idle">Toque no campo e depois escolha a ação, ou escolha primeiro a ação à esquerda. O minuto fica registado no momento da ação. Teclado: letras das ações, <kbd>Z</kbd> anula o último.</div>`;
-  const s=stats(m);
-  return `<div class="live ${ro?'readonly':''}">
-  <section class="card pad">
-    <h3>Jogo · ${m.clock.half}ª parte</h3>
-    <div class="ctrl"><button class="btn ${m.clock.running?'dark':'pri'}" data-clock>${m.clock.running?'Pausa':(elapsed(m)>0?'Retomar':'Iniciar '+m.clock.half+'ª')}</button>
-      <button class="btn" data-endhalf ${m.status==='terminado'?'disabled':''}>${m.clock.half===1?'Fim 1ª parte':'Fim do jogo'}</button></div>
-    <div class="poss"><button class="us ${m.poss.cur==='us'?'on':''}" data-poss="us"><b>Posse ${esc(short(m.home))}</b><span id="posUs">${fmtClock(p.us)}</span></button>
-      <button class="opp ${m.poss.cur==='opp'?'on':''}" data-poss="opp"><b>Posse ${esc(short(m.opp))}</b><span id="posOpp">${fmtClock(p.opp)}</span></button></div>
-    <div class="pbar"><i id="posBar" style="width:${pt?p.us/pt*100:50}%"></i></div>
-    ${PAD.map(([g,keys])=>`<h3>${g}</h3><div class="acts">${keys.map(k=>`<button class="act ${ACT[k].opp?'opp':''} ${pd&&pd.type===k?'sel':''}" data-act="${k}"><span class="dot" style="background:${ACT[k].c}"></span>${ACT[k].l}${ACT[k].k?`<kbd>${ACT[k].k}</kbd>`:''}</button>`).join('')}</div>`).join('')}
-  </section>
-  <section class="view" style="gap:12px;min-width:0">${stepHtml}
-    <div class="card"><div class="pitch-h"><span class="muted">${st==='loc'?'Toque no local da ação':ro?'':'Toque no campo para marcar o local'}</span><div class="seg" role="group" aria-label="Mostrar no campo">${[['ult','Últimos'],['parte','Esta parte'],['rem','Remates'],['tudo','Tudo']].map(([k,l])=>`<button data-mf="${k}" aria-pressed="${(S.mf||'ult')===k}">${l}</button>`).join('')}</div></div>
-      <div class="pitchwrap ${st==='loc'?'pick':''} ${!pd&&!ro?'pre':''}">${pitchSVG({markers:marks,id:'livePitch'})}</div>
-      <div class="mini"><div><b>${count(evH,e=>e.type==='rec')}</b><span>Recuperações</span></div><div><b>${count(evH,e=>e.type==='perda')}</b><span>Perdas</span></div><div><b>${count(evH,e=>e.type==='pe')}</b><span>Passes errados</span></div><div><b>${count(evH,isShot)}</b><span>Remates</span></div></div>
-      <p class="note" style="margin:10px 0 0">Valores da ${m.clock.half}ª parte. Jogo inteiro: ${s.rec.t} rec. · ${s.perda.t} perdas · ${s.pe.t} p. errados · ${s.shots.t} remates · ${s.atk.t} ataques.</p></div>
-  </section>
-  <section class="card logcol"><h2>Registo <span class="pill">${m.events.length}</span><span class="sp"></span><button class="btn sm" data-undo ${m.events.length&&!ro?'':'disabled'}>Anular último</button></h2>
-    <ul class="log">${m.events.length?[...m.events].reverse().slice(0,150).map(e=>logItem(m,e,ro)).join(''):'<li class="muted" style="display:block">Nenhuma acção registada.</li>'}</ul></section></div>`;
+  else if(!pd&&preOk) marks.push({x:S.preLoc.x,y:S.preLoc.y,c:'#fff',r:1.7,cls:'pre'});
+  const kb=i=>i<9?`<kbd>${i+1}</kbd>`:'';
+
+  /* barra: placar, relógio, partes, posse */
+  const bar=`<div class="lv-bar">
+    <div class="lv-sb"><span class="tm us">${esc(m.home)}</span><span class="sc num" id="lvScore">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="tm opp">${esc(m.opp)}</span></div>
+    <div class="lv-clock">
+      <span class="ld ${m.clock.running?'on':''}"></span><span class="t num" id="liveClock">${fmtClock(elapsed(m))}</span>
+      <span class="per">${ended?'Terminado':m.clock.half+'.ª parte'}</span>
+      <button class="btn sm" data-clkadj="-60" ${ro||ended?'disabled':''} aria-label="Recuar um minuto">−1′</button>
+      <button class="btn sm" data-clkadj="60" ${ro||ended?'disabled':''} aria-label="Avançar um minuto">+1′</button>
+      <button class="btn sm" data-endhalf ${ro||ended?'disabled':''}>${m.clock.half===1?'Fim 1.ª parte':'Terminar jogo'}</button>
+      <button class="btn pri lv-go" data-clock ${ro||ended?'disabled':''}>${m.clock.running?'Pausar':(elapsed(m)>0?'Retomar':'Iniciar')}</button>
+    </div>
+    <div class="lv-poss"><span class="lab">Posse</span>
+      <button class="us ${m.poss.cur==='us'?'on':''}" data-poss="us" ${ro?'disabled':''}>${esc(short(m.home))} <span class="num" id="posUs">${fmtClock(p.us)}</span></button>
+      <div class="pbar"><i id="posBar" style="width:${pt?p.us/pt*100:50}%"></i></div>
+      <button class="opp ${m.poss.cur==='opp'?'on':''}" data-poss="opp" ${ro?'disabled':''}><span class="num" id="posOpp">${fmtClock(p.opp)}</span> ${esc(short(m.opp))}</button>
+    </div>
+  </div>`;
+
+  /* painel registar ação */
+  const plGrid=(key)=>{
+    const pls=players().filter(x=>x.active!==false).sort((x,y)=>(+x.num||99)-(+y.num||99));
+    const sel=key==='pre'?prePl:null;
+    const btn=pl=>`<button class="lv-pl ${pl.pos==='GR'?'gk':''}" ${key==='pre'?`data-prepl="${pl.id}"`:`data-pl="${pl.id}"`} aria-pressed="${sel===pl.id}"><b class="num">${esc(pl.num||'–')}</b><small>${esc(pl.name.split(' ').slice(-1)[0])}</small></button>`;
+    const none=key==='pre'?'':`<button class="lv-pl none" data-pl=""><b>—</b><small>Sem jogador</small></button>`;
+    const fs=fieldState(m);
+    if(!fs) return `<div class="lv-pls">${pls.map(btn).join('')}${none}</div>`;
+    const onL=pls.filter(x=>fs.on.has(x.id)), bL=pls.filter(x=>fs.bench.has(x.id)), oL=pls.filter(x=>!fs.on.has(x.id)&&!fs.bench.has(x.id));
+    if(pd&&pd.type==='subst'&&key==='player2') return `<div class="lv-sub">Banco</div><div class="lv-pls">${bL.map(btn).join('')}${none}</div>${oL.length?`<details><summary class="note">Outros jogadores do plantel</summary><div class="lv-pls">${oL.map(btn).join('')}</div></details>`:''}`;
+    return `<div class="lv-pls">${onL.map(btn).join('')}${none}</div>${(bL.length||oL.length)?`<details><summary class="note">Banco e outros</summary><div class="lv-pls">${[...bL,...oL].map(btn).join('')}</div></details>`:''}`;
+  };
+  const actGrid=()=>{ const keys=side==='opp'?PAD.find(g=>g[0]==='Adversário')[1]:PAD.filter(g=>g[0]!=='Adversário').flatMap(g=>g[1]);
+    return `<div class="lv-acts">${keys.map(k=>`<button class="lv-a" data-act="${k}"><span class="dot" style="background:${ACT[k].opp?'var(--lv-opp)':ACT[k].c}"></span><span class="l">${ACT[k].l}</span>${ACT[k].k?`<kbd>${ACT[k].k}</kbd>`:''}</button>`).join('')}</div>`; };
+  const row=(n,title,val,cls)=>`<div class="lv-st ${cls||''}"><span class="sn">${cls==='done'?'✓':n}</span><span class="tt">${title}</span><em>${val||''}</em></div>`;
+  let body='';
+  if(ro){ body=`<div class="lockbanner">${m.locked?'Jogo trancado pelo administrador do clube. Só é possível consultar.':'O seu perfil é só de leitura.'}</div>`; }
+  else if(!pd){
+    let n=1;
+    body=row(n++,'Onde?',preOk?`${ZN[S.preLoc.z]} <button class="linkbtn" data-clearloc>limpar</button>`:'Toque no campo',preOk?'done':'on')
+      +row(n++,'Que ação?','',preOk?'on':'')+actGrid()
+      +(side==='us'?row(n++,'Quem?',prePl?`${esc((S.players.find(x=>x.id===prePl)||{}).name||'')} <button class="linkbtn" data-prepl="">limpar</button>`:'opcional, antes ou depois da ação',prePl?'done':'')+plGrid('pre'):'')
+      +`<div class="lv-hint">Pode começar pelo campo, pela ação ou pelo jogador. O evento grava-se sozinho quando estiver completo. O minuto conta a partir do toque na ação.</div>`;
+  } else {
+    const a=ACT[pd.type], hasLoc=a.steps.includes('loc');
+    const disp=[...(hasLoc?['loc']:[]),'act',...a.steps.filter(k=>k!=='loc')];
+    let n=1;
+    body=`<div class="lv-cur"><span class="pill">${minuteLabel(m,pd.e.half,pd.e.t)}</span><b>${a.l}</b><button class="btn sm ghost" data-cancel>Cancelar <kbd>Esc</kbd></button></div>`;
+    for(const k of disp){
+      if(k==='act'){ body+=row(n++,'Que ação?',a.l,'done'); continue; }
+      const idx=a.steps.indexOf(k), done=idx<pd.i||(k==='loc'&&pd.e.x!=null), cur=k===st&&!done;
+      const title=k==='loc'?'Onde?':k==='player'?(pd.type==='subst'?'Quem sai?':'Quem?'):k==='player2'?'Quem entra?':k==='corr'?'Por que corredor?':k==='cons'?'Consequência':stepName(pd.type,k);
+      const val=done?esc(stepDone(pd.type,k,pd.e)):cur&&(k==='player'||k==='player2')?'<span class="kbhint">escreva o número</span> <b class="numbuf" id="numBuf"></b>':cur&&k==='loc'?'Toque no campo':'';
+      body+=row(n++,title,val,done?'done':cur?'on':'');
+      if(!cur) continue;
+      if(k==='loc') body+=`<div class="lv-opts"><button class="lv-o skip" data-skiploc>Sem localização</button></div>`;
+      else if(k==='player'||k==='player2') body+=plGrid(k);
+      else { const opts=k==='sub'?a.subs:k==='corr'?CORR:CONS; body+=`<div class="lv-opts">${opts.map(([v,l],i)=>`<button class="lv-o ${v==='nada'?'skip':''} o-${v}" data-v="${k}" data-k="${v}">${kb(i)}${l}</button>`).join('')}</div>`; }
+    }
+    const miss=a.steps.slice(pd.i).filter(k=>!(k==='loc'&&pd.e.x!=null)).map(k=>k==='loc'?'local':k==='player'||k==='player2'?'jogador':k==='corr'?'corredor':k==='cons'?'consequência':'resultado');
+    body+=`<div class="lv-hint">${miss.length?'Falta: '+[...new Set(miss)].join(', '):'A gravar…'}</div>`;
+  }
+  const panel=`<section class="card lv-act" data-team="${side}">
+    <div class="lv-h"><h2>Registar ação</h2><button class="btn sm" data-undo ${m.events.length&&!ro?'':'disabled'}>↶ Anular último</button></div>
+    <div class="seg lv-team" role="group" aria-label="Equipa"><button class="us" data-side="us" aria-pressed="${side==='us'}" ${pd?'disabled':''}>${esc(m.home)}</button><button class="opp" data-side="opp" aria-pressed="${side==='opp'}" ${pd?'disabled':''}>${esc(m.opp)}</button></div>
+    ${body}
+    <p class="lv-keys">Teclado: letras das ações · números do jogador · <kbd>1</kbd>–<kbd>9</kbd> opções · <kbd>Q</kbd> troca equipa · <kbd>Z</kbd> anula · <kbd>Esc</kbd> cancela</p>
+  </section>`;
+
+  /* estatística */
+  const E=m.events, c=f=>count(E,f);
+  const onT=t=>e=>e.type===(t?'golo_adv':'golo')||(e.type===(t?'remate_adv':'remate')&&e.sub==='baliza');
+  const cmp=(l,a,b,fmt)=>{ const tt=(a+b)||1; return `<span class="a num">${fmt?fmt(a):a}</span><div class="b2"><i style="width:${a/tt*100}%" class="u"></i><i style="width:${b/tt*100}%" class="o"></i></div><span class="b num">${fmt?fmt(b):b}</span><span class="lab">${l}</span>`; };
+  const pct=v=>Math.round(v)+'%';
+  const stats=`<section class="card lv-stats"><div class="lv-h"><h2>Estatística</h2><span class="muted">Jogo inteiro</span></div>
+    <div class="lv-cmp">${cmp('Golos',c(e=>e.type==='golo'),c(e=>e.type==='golo_adv'))}${cmp('Remates',c(isShot),c(e=>e.type==='remate_adv'||e.type==='golo_adv'))}${cmp('Remates à baliza',c(onT(0)),c(onT(1)))}${cmp('Ataques',c(e=>e.type==='ataque'),c(e=>e.type==='ataque_adv'))}${cmp('Cartões',c(e=>e.type==='amarelo'||e.type==='vermelho'),c(e=>e.type==='amarelo_adv'||e.type==='vermelho_adv'))}${pt?cmp('Posse',p.us/pt*100,p.opp/pt*100,pct):''}</div>
+    <div class="lv-mini">${[['Recuperações','rec'],['Perdas','perda'],['Passes errados','pe'],['Faltas cometidas','fc'],['Faltas sofridas','fs'],['Cantos','canto']].map(([l,t])=>`<div><b class="num">${c(e=>e.type===t)}</b><span>${l}</span></div>`).join('')}</div></section>`;
+
+  const pitch=`<section class="card lv-pitch"><div class="lv-h"><h2>Campo</h2><div class="seg" role="group" aria-label="Mostrar no campo">${[['ult','Últimos'],['parte','Esta parte'],['rem','Remates'],['tudo','Tudo']].map(([k,l])=>`<button data-mf="${k}" aria-pressed="${(S.mf||'ult')===k}">${l}</button>`).join('')}</div></div>
+    <div class="pitchwrap ${st==='loc'?'pick':''} ${!pd&&!ro?'pre':''}">${pitchSVG({markers:marks,id:'livePitch'})}</div>
+    <div class="lv-dir"><span>◀ Ataque ${esc(short(m.opp))}</span><span>Ataque ${esc(short(m.home))} ▶</span></div></section>`;
+
+  const log=`<section class="card lv-log"><div class="lv-h"><h2>Eventos <span class="pill">${m.events.length}</span></h2></div>
+    <ul class="log">${m.events.length?[...m.events].reverse().slice(0,150).map(e=>logItem(m,e,ro)).join(''):'<li class="muted" style="display:block">Nenhuma acção registada. Toque no campo ou escolha uma acção para registar a primeira.</li>'}</ul></section>`;
+
+  return `<div class="lv ${ro?'readonly':''}">${bar}<div class="lv-grid"><div class="lv-col">${pitch}${log}</div><div class="lv-col">${panel}${stats}</div></div></div>`;
 }
 const short = n => { n=String(n||''); return n.length>10?n.split(' ')[0]:n; };
 function logItem(m,e,ro){
@@ -1289,6 +1334,9 @@ document.addEventListener('click', async ev=>{
   if(d.act){ if(S.pending&&S.pending.type===d.act){ S.pending=null; render(); } else begin(d.act); }
   else if(d.cancel!==undefined){ S.pending=null; render(); }
   else if(d.clearloc!==undefined){ S.preLoc=null; render(); }
+  else if(d.side){ if(!S.pending){ S.side=d.side; if(d.side==='opp') S.prePl=null; render(); } }
+  else if(d.prepl!==undefined){ const m2=M(); S.prePl=d.prepl&&!(S.prePl&&S.prePl.id===d.prepl)?{id:d.prepl,mid:m2.id}:null; render(); }
+  else if(d.clkadj){ if(!matchRO(m)){ m.clock.base=Math.max(0,m.clock.base+(+d.clkadj)); if(m.clock.running&&elapsed(m)<0) m.clock.base=0; touch(m); render(); } }
   else if(d.mf){ S.mf=d.mf; render(); }
   else if(d.skiploc!==undefined){ S.pending.i++; advance(); }
   else if(d.pl!==undefined){ stepValue(curStep(),d.pl||null); }
@@ -1435,7 +1483,7 @@ document.addEventListener('change', async ev=>{
 });
 document.addEventListener('keydown', ev=>{
   if(view()!=='registo'||/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)||ev.metaKey||ev.ctrlKey||ev.altKey) return;
-  if(ev.key==='Escape'){ if(S.pending){ S.pending=null; render(); } else if(S.preLoc){ S.preLoc=null; render(); } return; }
+  if(ev.key==='Escape'){ if(S.pending){ S.pending=null; render(); } else if(S.preLoc||S.prePl){ S.preLoc=null; S.prePl=null; render(); } return; }
   if(S.pending){
     const st=curStep();
     if(st==='player'||st==='player2'){
@@ -1451,7 +1499,8 @@ document.addEventListener('keydown', ev=>{
   const k=ev.key.toUpperCase(), a=Object.entries(ACT).find(([,v])=>v.k===k);
   if(a){ ev.preventDefault(); begin(a[0]); }
   else if(k==='Z'){ ev.preventDefault(); undo(); }
+  else if(k==='Q'){ ev.preventDefault(); S.side=(S.side||'us')==='us'?'opp':'us'; if(S.side==='opp') S.prePl=null; render(); }
 });
-window.addEventListener('hashchange',()=>{ S.pending=null; S.preLoc=null; S.confirm=null; if(view()==='clube') loadClubAdmin(); render(); });
+window.addEventListener('hashchange',()=>{ S.pending=null; S.preLoc=null; S.prePl=null; S.confirm=null; if(view()==='clube') loadClubAdmin(); render(); });
 window.addEventListener('beforeunload', e=>{ if(dirty.size){ e.preventDefault(); e.returnValue=''; } });
 boot();
