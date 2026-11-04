@@ -60,6 +60,9 @@ const $ = id => document.getElementById(id);
 const myRole = () => S.isSuper ? 'super' : (S.club ? S.myRoles[S.club.id] : null);
 const canEdit = () => ['super','admin','treinador','analista'].includes(myRole());
 const isAdmin = () => ['super','admin'].includes(myRole());
+const daysLeft = d => d?Math.round((Date.parse(d+'T23:59:59Z')-Date.now())/864e5):null;
+const subLabel = c => { if(!c.paid_until) return '<span class="muted">sem data limite</span>'; const n=daysLeft(c.paid_until); return n<0?`terminou há ${-n} dia(s)`:n===0?'termina hoje':`faltam ${n} dia(s)`; };
+function addMonth(d){ const base=(!d||d<today())?today():d; const [y,m,dd]=base.split('-').map(Number); const t=new Date(Date.UTC(y,m,1)); const last=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth()+1,0)).getUTCDate(); t.setUTCDate(Math.min(dd,last)); return t.toISOString().slice(0,10); }
 const clubActive = c => c && c.status==='ativo' && (!c.paid_until || c.paid_until >= today());
 const today = () => new Date().toISOString().slice(0,10);
 const matchRO = m => !canEdit() || (m && m.locked && !isAdmin());
@@ -1105,6 +1108,7 @@ function renderHeader(){
   st.hidden=!S.teams.length;
   st.innerHTML=S.teams.map(t=>`<option value="${t.id}" ${S.team&&t.id===S.team.id?'selected':''}>${esc(t.name)}</option>`).join('');
   $('hdrClub').textContent = S.club ? S.club.name : 'Análise de jogo';
+  const sw=$('subWarn'); if(sw){ let h=''; if(S.club&&!S.isSuper&&S.club.paid_until&&clubActive(S.club)){ const n=daysLeft(S.club.paid_until); if(n<=7) h=`A mensalidade do ${esc(S.club.name)} está paga até <b>${esc(fmtDate(S.club.paid_until))}</b> (${n===0?'termina hoje':`faltam ${n} dia(s)`}). Para continuar a usar a app depois dessa data, contacte a M Arte Design: +351 934 574 197 · marinho_ribeiro@hotmail.com`; } sw.innerHTML=h; sw.hidden=!h; }
   const hl=$('hdrLogo'); if(hl){ const u=S.club&&S.logos&&S.logos.club[S.club.id]; hl.innerHTML=u?`<img src="${esc(u)}" alt="">`:''; hl.hidden=!u; }
   const r=myRole();
   $('hdrUser').innerHTML = `${esc(S.profile.full_name||S.profile.email)} <span class="role ${r==='super'?'super':r==='admin'?'admin':''}">${r==='super'?'Super-admin':ROLE_L[r]||'—'}</span>`;
@@ -1574,7 +1578,7 @@ function vSuper(){
     <td class="l"><input class="inp" data-cf="name" data-id="${c.id}" value="${esc(c.name)}" style="min-width:140px"></td>
     <td class="l"><input type="color" data-cf="color" data-id="${c.id}" value="${esc(c.color||'#C3262C')}" aria-label="Cor"></td>
     <td class="l"><select class="inp" data-cf="status" data-id="${c.id}"><option value="ativo" ${c.status==='ativo'?'selected':''}>Activo</option><option value="suspenso" ${c.status==='suspenso'?'selected':''}>Suspenso</option></select>${atr?'<div class="st-atraso small">em atraso</div>':''}</td>
-    <td class="l"><input class="inp" type="date" data-cf="paid_until" data-id="${c.id}" value="${esc(c.paid_until||'')}"></td>
+    <td class="l"><div class="row" style="gap:6px;flex-wrap:nowrap"><input class="inp" type="date" data-cf="paid_until" data-id="${c.id}" value="${esc(c.paid_until||'')}"><button class="btn sm" data-renew="${c.id}" title="Prolongar a data limite por mais um mês">+1 mês</button></div><div class="small ${atr?'st-atraso':''}" style="margin-top:3px">${subLabel(c)}</div></td>
     <td class="l"><input class="inp" type="number" step="0.01" min="0" data-cf="monthly_fee" data-id="${c.id}" value="${esc(c.monthly_fee??'')}" style="width:90px"></td>
     <td><input type="checkbox" data-cf="ai_enabled" data-id="${c.id}" ${c.ai_enabled?'checked':''} aria-label="IA activa"></td>
     <td class="l"><input class="inp" type="number" min="0" data-cf="ai_monthly_limit" data-id="${c.id}" value="${esc(c.ai_monthly_limit)}" style="width:80px"></td>
@@ -1752,6 +1756,9 @@ document.addEventListener('click', async ev=>{
   else if(d.delmem){ S.confirm=null; const { error }=await sb.from('memberships').delete().eq('club_id',S.club.id).eq('user_id',d.delmem); if(error) say('clube',error.message,true); else { await loadClubAdmin(); say('clube','Acesso retirado.'); } }
   else if(d.delteam){ S.confirm=null; const { error }=await sb.from('teams').delete().eq('id',d.delteam); if(error) say('clube',error.message,true); else { await selectClub(S.club.id,true); location.hash='#clube'; say('clube','Equipa apagada.'); } }
   else if(d.enter){ await selectClub(d.enter); location.hash='#'+(S.teams.length?'jogos':'clube'); }
+  else if(d.renew){ const c=S.clubs.find(x=>x.id===d.renew); if(!c) return; const nv=addMonth(c.paid_until);
+    const { error }=await sb.from('clubs').update({paid_until:nv,status:'ativo'}).eq('id',c.id);
+    if(error) toast(error.message); else { c.paid_until=nv; c.status='ativo'; if(S.club&&S.club.id===c.id) Object.assign(S.club,c); toast(`${c.name}: utilização até ${fmtDate(nv)}.`); render(); } }
   else if(d.reloadsuper!==undefined){ S.admin.loaded=false; render(); }
   else if(d.delclub){ S.confirm=null; const { error }=await sb.from('clubs').delete().eq('id',d.delclub); if(error) say('admin',error.message,true); else { if(S.club&&S.club.id===d.delclub){ S.club=null; } S.admin.loaded=false; say('admin','Clube apagado.'); } }
   else if(d.sresetpw){ const pw=$('spw-'+d.sresetpw).value; S.confirm=null; try{ await call('reset_password',{user_id:d.sresetpw,password:pw}); say('admin','Palavra-passe reposta: '+pw); }catch(e){ say('admin',e.message,true); } }
