@@ -681,3 +681,31 @@ table.st .band{background:rgba(15,23,42,.025)}
 .bar .tr{background:rgba(15,23,42,.06)}
 .lp-name{background:rgba(10,16,13,.82);color:#fff}
 main,.top-in{width:100%;box-sizing:border-box}
+
+/* ---- registo ao vivo: passos, local primeiro, teclado ---- */
+.live .step{scroll-margin-top:84px}
+.trail{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:12px}
+.trail .tr{display:inline-flex;align-items:center;gap:6px;padding:4px 9px 4px 4px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:600}
+.trail .tr i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-mono);font-size:11px;background:var(--soft)}
+.trail .tr small{font-weight:500;color:var(--ink);opacity:.85}
+.trail .tr.on{color:var(--ink);border-color:var(--acc)}
+.trail .tr.on i{background:var(--acc);color:#fff}
+.trail .tr.done i{background:var(--good);color:#fff}
+.trail .tr-sep{color:var(--muted);opacity:.6}
+.step .prompt{font-weight:600;font-size:15px}
+.kbhint{font-weight:500;font-size:12px;color:var(--muted)}
+.numbuf{font-family:var(--f-mono);color:var(--acc);margin-left:4px}
+.chip kbd,.btn kbd,.idle kbd{font-family:var(--f-mono);font-size:10px;color:var(--muted);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;margin-right:6px}
+.btn kbd{margin:0 0 0 6px}
+.chip .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;box-shadow:0 0 0 1px var(--line)}
+.chip kbd:last-child:not(:first-child){margin:0 0 0 6px}
+.pitch-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;font-size:13px}
+.pitchwrap.pre svg{cursor:crosshair}
+.mk.pop{animation:mkpop .55s ease;transform-box:fill-box;transform-origin:center}
+.mk.pre{stroke:var(--acc);stroke-width:.6;animation:mkpre 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes mkpop{0%{transform:scale(2.6);opacity:.25}100%{transform:none;opacity:1}}
+@keyframes mkpre{50%{transform:scale(1.35)}}
+.score .sc.flash{animation:scflash 1.3s ease}
+@keyframes scflash{0%{background:var(--good);color:#fff;transform:scale(1.15)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.mk.pop,.mk.pre,.score .sc.flash{animation:none}}
+@media (max-width:760px){.kbhint,.chip kbd,.btn kbd,.idle kbd{display:none}}
