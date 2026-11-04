@@ -827,3 +827,52 @@ main.gut{min-width:0;width:100%}
 }
 .fc-grid{display:block;columns:3 280px;column-gap:14px}
 .fc-g{break-inside:avoid;margin-bottom:14px;display:inline-block;width:100%}
+
+/* =====================================================================
+   RELATÓRIO PDF DO JOGO (só aparece na impressão / "Guardar como PDF")
+   ===================================================================== */
+@media screen{#printDoc{display:none!important}}
+.rp{--paper:#fff;--card:#fff;--card-solid:#fff;--soft:#F1F4F8;--ink:#111827;--muted:#4B5563;--line:#D5DBE3;
+  --glass:#fff;--glass-b:1px solid #D5DBE3;--sh:none;--acc:#1D4ED8;--acc2:#2563EB;--opp:#1D4ED8;--red:#C3262C;--good:#15803D;--gold:#B98900;--pe:#D97706;--bad:#B91C1C;--warn:#B45309;
+  --lv-us:#0369A1;--lv-opp:#C2410C;color:var(--ink);background:#fff;font-family:var(--f-body);font-size:11.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.rp *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;text-shadow:none!important;animation:none!important}
+.rp .card,.rp .kpi,.rp .in,.rp .banner{background:#fff!important;border:1px solid var(--line)!important;border-radius:8px!important;break-inside:avoid;padding:10px 12px}
+.rp .view{gap:10px!important}
+.rp h1{font-size:20px!important}.rp h2{font-size:14px!important;break-after:avoid}
+.rp .mhead .sp,.rp .seg,.rp button,.rp .btn,.rp details summary,.rp [data-ai],.rp .g-map>section:first-child{display:none!important}
+.rp .g-map,.rp .g3,.rp .g2{grid-template-columns:1fr 1fr!important;gap:10px!important}
+.rp .kpis{grid-template-columns:repeat(4,1fr)!important;gap:8px!important}
+.rp .kpi b{font-size:22px!important;color:var(--ink)!important}
+.rp .tscroll{overflow:visible!important}
+.rp table{font-size:10.5px}
+.rp .periods{min-width:0!important}
+.rp .ins{grid-template-columns:1fr 1fr!important}
+.rp-cover{border-bottom:3px solid var(--ink);padding-bottom:12px;margin-bottom:14px}
+.rp-brand{display:flex;justify-content:space-between;gap:10px;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.rp-brand b{color:var(--ink)}
+.rp-score{display:flex;align-items:center;justify-content:center;gap:18px;margin:14px 0 6px;font-family:var(--lv-cond,var(--f-disp));text-transform:uppercase}
+.rp-score span{font-size:24px;font-weight:700;flex:1;text-align:center}
+.rp-score b{font-size:42px;font-weight:700;padding:0 14px;border:2px solid var(--ink);border-radius:8px}
+.rp-meta{text-align:center;color:var(--muted)}
+.rp-note{text-align:center;margin:6px 0 0;font-style:italic}
+.rp-sec{margin-top:10px}
+.rp-maps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.rp-map{break-inside:avoid}
+.rp-map h3{font-size:12px;margin:0 0 4px;display:flex;justify-content:space-between}
+.rp-map h3 span{color:var(--muted)}
+.rp-map svg{width:100%;height:auto;display:block}
+.rp-log{max-height:none!important;columns:2;column-gap:18px;display:block!important}
+.rp-log li{break-inside:avoid;font-size:10.5px;padding:3px 0!important}
+.rp-log li .x{display:none}
+.rp-foot{margin-top:14px;padding-top:8px;border-top:1px solid var(--line);color:var(--muted);font-size:10px;text-align:center}
+@media print{
+  @page{size:A4;margin:12mm}
+  body.printing{background:#fff!important}
+  body.printing::before,body.printing>*:not(#printDoc){display:none!important}
+  body.printing #printDoc{display:block!important}
+}
+.rp-an .mhead,.rp .ai-none{display:none!important}
+.rp .g-map{grid-template-columns:1fr!important}
+.rp .g-map>.view>.card{break-inside:avoid}
+@media print{html,body{background:#fff!important}}
+@media print{:root,html,body{color-scheme:light!important;background:#fff!important}}

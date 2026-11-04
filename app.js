@@ -179,7 +179,7 @@ function startPause(m){
 function endHalf(m){
   if(m.clock.running) startPause(m);
   if(m.clock.half===1){ m.clock={half:2,running:false,startedAt:null,base:0}; toast('Intervalo. 2ª parte pronta a começar.'); }
-  else { m.status='terminado'; toast('Jogo terminado. Veja a análise.'); }
+  else { m.status='terminado'; toast('Jogo terminado. Já pode criar o PDF com todas as análises.'); }
   touch(m); render();
 }
 function begin(type){
@@ -975,7 +975,7 @@ function vRegisto(m){
       <button class="btn sm" data-clkadj="-60" ${ro||ended?'disabled':''} aria-label="Recuar um minuto">−1′</button>
       <button class="btn sm" data-clkadj="60" ${ro||ended?'disabled':''} aria-label="Avançar um minuto">+1′</button>
       <button class="btn sm" data-endhalf ${ro||ended?'disabled':''}>${m.clock.half===1?'Fim 1.ª parte':'Terminar jogo'}</button>
-      <button class="btn pri lv-go" data-clock ${ro||ended?'disabled':''}>${m.clock.running?'Pausar':(elapsed(m)>0?'Retomar':'Iniciar')}</button>
+      ${ended?'<button class="btn pri lv-go" data-pdf>Criar PDF do jogo</button>':`<button class="btn pri lv-go" data-clock ${ro?'disabled':''}>${m.clock.running?'Pausar':(elapsed(m)>0?'Retomar':'Iniciar')}</button>`}
     </div>
     <div class="lv-poss"><span class="lab">Posse</span>
       <button class="us ${m.poss.cur==='us'?'on':''}" data-poss="us" ${ro?'disabled':''}>${esc(short(m.home))} <span class="num" id="posUs">${fmtClock(p.us)}</span></button>
@@ -1088,7 +1088,7 @@ function vAnalise(m){
     <div class="sp row">${scopeBar()}<button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`
   :`<div class="mhead"><div><h1>${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}</h1>
     <div class="meta">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''} · ${esc(S.team?S.team.name:'')} · ${m.events.length} acções${m.locked?' · trancado':''}${m.scoreUnknown&&!sc?' · resultado não registado':''}</div></div>
-    <div class="sp row">${scopeBar()}<button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
+    <div class="sp row">${scopeBar()}<button class="btn pri" data-pdf>Criar PDF do jogo</button><button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
   ${m.note&&!m.season?`<div class="banner">${esc(m.note)}</div>`:''}
   <div class="kpis">
     <div class="kpi"><span>Posse</span><b>${s.poss!=null?s.poss+'%':'—'}</b><small>${s.poss!=null?'adv. '+(100-s.poss)+'%':'não cronometrada'}</small></div>
@@ -1125,9 +1125,49 @@ function vAnalise(m){
       <tr><td>Defesas completas</td><td class="tot">${s.gk.dc}</td></tr><tr><td>Defesas incompletas</td><td class="tot">${s.gk.di}</td></tr><tr><td>Defesas p/ canto</td><td class="tot">${s.gk.ca}</td></tr>
       <tr><td>Cartões ${esc(short(m.home))} (A / V)</td><td class="tot">${s.cards.am} / ${s.cards.vm}</td></tr><tr><td>Cartões adv. (A / V)</td><td class="tot">${s.cards.amA} / ${s.cards.vmA}</td></tr><tr><td>Remates adv. (à baliza)</td><td class="tot">${s.shotsAdv} (${s.shotsAdvOn})</td></tr></tbody></table></div></section>
   </div>
-  ${m.season?'':`<section class="card"><h2>Relatório técnico com IA<span class="sp"></span>${aiOn&&!matchRO(m)?`<button class="btn pri" data-ai ${S.aiBusy?'disabled':''}>${S.aiBusy?'A escrever… (até 1 minuto)':(m.ai?'Gerar novo relatório':'Gerar relatório')}</button>`:''}</h2>
+  ${m.season?'':`<section class="card ${m.ai?'':'ai-none'}"><h2>Relatório técnico com IA<span class="sp"></span>${aiOn&&!matchRO(m)?`<button class="btn pri" data-ai ${S.aiBusy?'disabled':''}>${S.aiBusy?'A escrever… (até 1 minuto)':(m.ai?'Gerar novo relatório':'Gerar relatório')}</button>`:''}</h2>
     ${m.ai?`<div class="ai">${fmtAi(m.ai.text)}</div><p class="note">Gerado em ${new Date(m.ai.at).toLocaleString('pt-PT')}</p>`:`<p class="note">${aiOn?'Envia o resumo estatístico deste jogo à IA e recebe uma análise de treinador: diagnóstico, padrões, plano de treino da semana e ajustes para o próximo jogo.':'O relatório com IA não está incluído no plano deste clube. Fale com a M Arte Design para o activar.'}</p>`}</section>`}
   </div>`;
+}
+/* =========================================================
+   RELATÓRIO PDF DO JOGO — documento de impressão com todas as análises
+   ========================================================= */
+function vPdf(m){
+  const sc=score(m), s=stats(m);
+  const layers=[['rec','Recuperações'],['perda','Perdas de bola'],['pe','Passes errados'],['fc','Faltas cometidas'],['fs','Faltas sofridas'],['shot','Remates']];
+  const maps=layers.map(([k,l])=>{
+    const lev=m.events.filter(e=>k==='shot'?isShot(e):e.type===k), loc=lev.filter(e=>e.x!=null);
+    const zones={def:count(lev,e=>e.z==='def'),inter:count(lev,e=>e.z==='inter'),ofen:count(lev,e=>e.z==='ofen')};
+    const marks=loc.map(e=>k==='shot'?(e.type==='golo'?{x:e.x,y:e.y,c:'var(--gold)',r:1.6}:e.sub==='fora'?{x:e.x,y:e.y,c:'#fff',shape:'ring'}:e.sub==='interc'?{x:e.x,y:e.y,c:'#fff',shape:'x'}:{x:e.x,y:e.y,c:'#fff'}):{x:e.x,y:e.y,c:ACT[e.type].c});
+    return `<div class="rp-map"><h3>${l} <span>${lev.length}</span></h3>${pitchSVG({markers:marks,zones:lev.length?zones:null,labels:false})}</div>`;
+  }).join('');
+  const evs=[...m.events].sort((a,b)=>a.half-b.half||a.t-b.t);
+  const gen=new Date().toLocaleString('pt-PT',{dateStyle:'short',timeStyle:'short'});
+  return `<div class="rp-cover">
+      <div class="rp-brand"><b>${esc(S.club?S.club.name:'M Arte FC')}</b><span>${esc(S.team?S.team.name:'')} · Relatório do jogo</span></div>
+      <div class="rp-score"><span>${esc(m.home)}</span><b>${sc?sc[0]+' – '+sc[1]:'vs'}</b><span>${esc(m.opp)}</span></div>
+      <div class="rp-meta">${[fmtDate(m.date),m.time,m.comp,(m.halfLen||45)+' min por parte',m.events.length+' acções registadas',s.poss!=null?'posse '+s.poss+'%':''].filter(Boolean).map(esc).join(' · ')}</div>
+      ${m.note?`<p class="rp-note">${esc(m.note)}</p>`:''}
+    </div>
+    <div class="rp-an">${vAnalise(m)}</div>
+    <section class="card rp-sec"><h2>Mapas de acções por tipo</h2><div class="rp-maps">${maps}</div>
+      <div class="legend"><span>Remates: ● à baliza · ● golo (dourado) · ○ fora · × interceptado</span><span>Números = acções por zona</span></div></section>
+    ${vIndividual(m)}
+    <section class="card rp-sec"><h2>Cronologia do jogo <span class="pill">${evs.length}</span></h2>
+      <ul class="log rp-log">${evs.map(e=>logItem(m,e,true)).join('')||'<li>Sem acções registadas.</li>'}</ul></section>
+    <div class="rp-foot">Gerado em ${esc(gen)} · M ARTE FC Match Analyst · M Arte Design</div>`;
+}
+function makePdf(m){
+  if(!m) return;
+  let el=$('printDoc'); if(!el){ el=document.createElement('div'); el.id='printDoc'; el.className='rp'; document.body.appendChild(el); }
+  el.innerHTML=vPdf(m);
+  const old=document.title, clean=x=>String(x||'').replace(/[\\/:*?"<>|]+/g,'').trim();
+  document.title=`Relatório ${clean(m.home)} vs ${clean(m.opp)} ${clean(fmtDate(m.date)).replace(/\//g,'-')}`.trim();
+  document.body.classList.add('printing');
+  const done=()=>{ document.body.classList.remove('printing'); document.title=old; el.innerHTML=''; window.removeEventListener('afterprint',done); };
+  window.addEventListener('afterprint',done);
+  toast('Escolha "Guardar como PDF" no destino da impressão.');
+  setTimeout(()=>window.print(),250);
 }
 function vIndividual(m){
   const rows=indiv(m).filter(r=>!r.gk||r.act>0),k=S.sortI.k,d=S.sortI.d;
@@ -1154,7 +1194,7 @@ function vJogos(){
     <span class="note">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''}</span><span class="t">${esc(m.home)} vs ${esc(m.opp)}</span>
     <div class="row"><span class="s">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="pill">${esc(m.status||'')}</span><span class="pill">${m.events.length} acções</span>${m.locked?'<span class="pill">Trancado</span>':''}</div>
     <div class="row">${m.id===S.cur?'<span class="pill" style="background:var(--acc);color:var(--on-red)">Jogo activo</span>':`<button class="btn sm pri" data-open="${m.id}">Abrir</button>`}
-      <a class="btn sm" href="#analise" data-open="${m.id}" style="text-decoration:none">Análise</a>
+      <a class="btn sm" href="#analise" data-open="${m.id}" style="text-decoration:none">Análise</a>${m.status==='terminado'?`<button class="btn sm" data-pdfm="${m.id}">PDF</button>`:''}
       ${isAdmin()?(S.confirm==='m'+m.id?`<span class="confirm">Apagar este jogo? <button class="btn sm pri" data-delm="${m.id}">Apagar</button><button class="btn sm" data-noconf>Não</button></span>`:`<button class="btn sm ghost" data-conf="m${m.id}">Apagar</button>`):''}</div></div>`; }).join('')}</div></section>`:''}
   ${canEdit()?`<section class="card"><h2>Novo jogo · ${esc(S.team.name)}</h2><form id="newMatch" class="form">
     <label class="fl">Equipa<input class="inp" id="nm-home" value="${esc((S.club.short_name&&S.club.short_name.length>3?S.club.short_name:S.club.name).toUpperCase())}" required></label>
@@ -1404,6 +1444,8 @@ document.addEventListener('click', async ev=>{
   else if(d.mh){ S.mapHalf=d.mh; render(); }
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
+  else if(d.pdf!==undefined){ makePdf(M()); }
+  else if(d.pdfm){ makePdf(S.matches[d.pdfm]); }
   else if(d.pfpos!==undefined){ S.pfPos=d.pfpos; render(); }
   else if(d.print!==undefined){ document.body.classList.add('print-ficha'); window.print(); setTimeout(()=>document.body.classList.remove('print-ficha'),500); }
   else if(d.delphoto){ const p=S.players.find(x=>x.id===d.delphoto); if(!p||!canEdit()) return;
