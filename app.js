@@ -93,12 +93,13 @@ async function selectClub(id, quiet){
   lsSet('club',id);
   applyBrand();
   if(!S.club || (!clubActive(S.club) && !S.isSuper)){ render(); return; }
-  const [{data:teams},{data:players},{data:matches}] = await Promise.all([
+  const [{data:teams},{data:players},{data:matches},{data:opps}] = await Promise.all([
     sb.from('teams').select('*').eq('club_id',id).order('name'),
     sb.from('players').select('*').eq('club_id',id).order('name'),
-    sb.from('matches').select('*').eq('club_id',id).order('date',{ascending:false})
+    sb.from('matches').select('*').eq('club_id',id).order('date',{ascending:false}),
+    sb.from('opponents').select('*').eq('club_id',id).order('name')
   ]);
-  S.teams=teams||[]; S.players=players||[]; loadPhotos();
+  S.teams=teams||[]; S.players=players||[]; S.opps=opps||[]; loadPhotos(); loadLogos();
   for(const r of (matches||[])) S.matches[r.id]=fromRow(r);
   restorePending();
   const lt=lsGet('team-'+id);
@@ -604,6 +605,73 @@ async function loadPhotos(){
   (data||[]).forEach((d,i)=>{ if(d&&d.signedUrl) S.photos[ps[i].id]=d.signedUrl; });
   if(['plantel','jogador'].includes(view())) render();
 }
+/* ---------- logótipos: clube e adversários ---------- */
+const oppKey = n => String(n||'').trim().replace(/\s+/g,' ').toLowerCase();
+async function loadLogos(){
+  S.logos=S.logos||{club:{},opp:{}};
+  const paths=[], who=[];
+  if(S.club&&S.club.logo_path){ paths.push(S.club.logo_path); who.push(['club',S.club.id]); }
+  for(const o of (S.opps||[])) if(o.logo_path){ paths.push(o.logo_path); who.push(['opp',o.name_key]); }
+  if(!paths.length) return;
+  const { data } = await sb.storage.from('player-photos').createSignedUrls(paths, 3600);
+  (data||[]).forEach((d,i)=>{ if(d&&d.signedUrl){ const [k,id]=who[i]; S.logos[k][id]=d.signedUrl; } });
+  if(S.club&&S.team) render();
+}
+const initials2 = n => String(n||'').replace(/\b(SC|FC|CF|CD|GD|UD|AD|SL|AC|SAD|CLUBE|DE|DO|DA)\b/gi,'').trim().split(/\s+/).filter(Boolean).map(w=>w[0]).join('').slice(0,3).toUpperCase()||'?';
+function logoBox(url,name,size){ return `<span class="lg ${size||''}" title="${esc(name||'')}">${url?`<img src="${esc(url)}" alt="Logótipo ${esc(name||'')}">`:`<span>${esc(initials2(name))}</span>`}</span>`; }
+const clubLogo = (size,c) => { c=c||S.club; return logoBox(c&&S.logos&&S.logos.club[c.id],c&&c.name,size); };
+const oppLogo = (name,size) => logoBox(S.logos&&S.logos.opp[oppKey(name)],name,size);
+async function resizeLogo(file){
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); });
+  const sz=320, sc=Math.min(1,sz/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*sc)); c.height=Math.max(1,Math.round(img.height*sc));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(r,'image/png'));
+}
+async function ensureOpp(name){
+  const k=oppKey(name); if(!k) return null; let o=(S.opps||[]).find(x=>x.name_key===k); if(o) return o;
+  const { data, error } = await sb.from('opponents').insert({club_id:S.club.id,name:String(name).trim().replace(/\s+/g,' ')}).select().single();
+  if(error){ const { data:ex } = await sb.from('opponents').select('*').eq('club_id',S.club.id).eq('name_key',k).maybeSingle(); if(ex){ S.opps.push(ex); return ex; } throw error; }
+  S.opps.push(data); S.opps.sort((a,b)=>a.name.localeCompare(b.name)); return data;
+}
+async function uploadLogo(kind,name,file){
+  if(!file||!/^image\//.test(file.type)){ toast('Escolha uma imagem (PNG, JPG ou SVG).'); return; }
+  toast('A gravar o logótipo…');
+  try{
+    const blob=await resizeLogo(file);
+    if(kind==='club'){
+      const path=`${S.club.id}/logos/club.png`;
+      const { error }=await sb.storage.from('player-photos').upload(path,blob,{upsert:true,contentType:'image/png'}); if(error) throw error;
+      const { error:e2 }=await sb.rpc('set_club_logo',{c:S.club.id,p:path}); if(e2) throw e2;
+      S.club.logo_path=path; const { data }=await sb.storage.from('player-photos').createSignedUrl(path,3600); S.logos.club[S.club.id]=data.signedUrl+'&t='+Date.now();
+    } else {
+      const o=await ensureOpp(name); const path=`${S.club.id}/logos/opp-${o.id}.png`;
+      const { error }=await sb.storage.from('player-photos').upload(path,blob,{upsert:true,contentType:'image/png'}); if(error) throw error;
+      const { error:e2 }=await sb.from('opponents').update({logo_path:path}).eq('id',o.id); if(e2) throw e2;
+      o.logo_path=path; const { data }=await sb.storage.from('player-photos').createSignedUrl(path,3600); S.logos.opp[o.name_key]=data.signedUrl+'&t='+Date.now();
+    }
+    toast('Logótipo gravado.'); render();
+  }catch(e){ toast('Não foi possível gravar o logótipo: '+(e.message||e)); }
+}
+async function removeLogo(kind,name){
+  try{
+    if(kind==='club'){ const p=S.club.logo_path; const { error }=await sb.rpc('set_club_logo',{c:S.club.id,p:null}); if(error) throw error; if(p) await sb.storage.from('player-photos').remove([p]); S.club.logo_path=null; delete S.logos.club[S.club.id]; }
+    else { const o=(S.opps||[]).find(x=>x.name_key===oppKey(name)); if(!o) return; const p=o.logo_path; const { error }=await sb.from('opponents').update({logo_path:null}).eq('id',o.id); if(error) throw error; if(p) await sb.storage.from('player-photos').remove([p]); o.logo_path=null; delete S.logos.opp[o.name_key]; }
+    toast('Logótipo removido.'); render();
+  }catch(e){ toast('Não foi possível remover: '+(e.message||e)); }
+}
+function logoBtn(kind,name,has){ return `<label class="btn sm lg-upl">${has?'Mudar':'Inserir'} logótipo<input type="file" accept="image/*" data-logo="${kind}" ${name!=null?`data-name="${esc(name)}"`:''} hidden></label>${has?`<button class="btn sm ghost" data-dellogo="${kind}" ${name!=null?`data-name="${esc(name)}"`:''}>Remover</button>`:''}`; }
+function vLogos(){
+  const ce=canEdit(), adm=isAdmin(), hasC=!!(S.logos&&S.logos.club[S.club.id]);
+  const names=new Map(); for(const o of (S.opps||[])) names.set(o.name_key,o.name); for(const m of Object.values(S.matches)) if(m.opp&&!names.has(oppKey(m.opp))) names.set(oppKey(m.opp),m.opp);
+  const list=[...names.entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt'));
+  const games=k=>Object.values(S.matches).filter(m=>oppKey(m.opp)===k).length;
+  return `<section class="card" id="logos"><h2>Logótipos</h2>
+    <div class="lg-club">${clubLogo('xl')}<div><b>${esc(S.club.name)}</b><p class="note" style="margin:4px 0 10px">Aparece no topo da app, no registo ao vivo, nas análises e nos PDF dos jogos. Use de preferência um PNG com fundo transparente.</p>
+      ${adm?`<div class="row">${logoBtn('club',null,hasC)}</div>`:'<p class="note">Só o admin do clube pode mudar o logótipo do clube.</p>'}</div></div>
+    <h3 class="sec-h" style="margin-top:18px">Adversários <span class="pill">${list.length}</span></h3>
+    <div class="lg-list">${list.map(([k,n])=>{ const has=!!(S.logos&&S.logos.opp[k]); return `<div class="lg-row">${oppLogo(n,'md')}<span class="lg-n"><b>${esc(n)}</b><small>${games(k)} jogo(s)</small></span>${ce?`<span class="row">${logoBtn('opp',n,has)}</span>`:''}</div>`; }).join('')||'<p class="note">Os adversários aparecem aqui quando criar jogos, ou adicione-os já abaixo.</p>'}</div>
+    ${ce?`<form id="addOpp" class="row" style="margin-top:12px"><input class="inp" id="ao-name" placeholder="Nome do adversário" style="flex:1;min-width:180px" required maxlength="80"><label class="btn">Escolher logótipo<input type="file" accept="image/*" id="ao-file" hidden></label><button class="btn pri" type="submit">Adicionar adversário</button></form>`:''}
+  </section>`;
+}
 function avatar(p,size){ const u=S.photos&&S.photos[p.id]; return `<span class="av ${size||''}">${u?`<img src="${esc(u)}" alt="">`:`<span>${esc(p.num||initials(p.name))}</span>`}</span>`; }
 function statusPill(p){ const st=STATUS[p.status||'disponivel']||STATUS.disponivel; return `<span class="pill st-${st[1]}">${st[0]}${p.status&&p.status!=='disponivel'&&p.status_until?' até '+fmtDate(p.status_until):''}</span>`; }
 function ageOf(d){ if(!d) return null; const b=new Date(d), n=new Date(); let a=n.getFullYear()-b.getFullYear(); if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate())) a--; return a; }
@@ -934,6 +1002,7 @@ function renderHeader(){
   st.hidden=!S.teams.length;
   st.innerHTML=S.teams.map(t=>`<option value="${t.id}" ${S.team&&t.id===S.team.id?'selected':''}>${esc(t.name)}</option>`).join('');
   $('hdrClub').textContent = S.club ? S.club.name : 'Análise de jogo';
+  const hl=$('hdrLogo'); if(hl){ const u=S.club&&S.logos&&S.logos.club[S.club.id]; hl.innerHTML=u?`<img src="${esc(u)}" alt="">`:''; hl.hidden=!u; }
   const r=myRole();
   $('hdrUser').innerHTML = `${esc(S.profile.full_name||S.profile.email)} <span class="role ${r==='super'?'super':r==='admin'?'admin':''}">${r==='super'?'Super-admin':ROLE_L[r]||'—'}</span>`;
   const m=M(), el=$('hdrScore');
@@ -968,7 +1037,7 @@ function vRegisto(m){
 
   /* barra: placar, relógio, partes, posse */
   const bar=`<div class="lv-bar">
-    <div class="lv-sb"><span class="tm us">${esc(m.home)}</span><span class="sc num" id="lvScore">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="tm opp">${esc(m.opp)}</span></div>
+    <div class="lv-sb">${clubLogo('md')}<span class="tm us">${esc(m.home)}</span><span class="sc num" id="lvScore">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="tm opp">${esc(m.opp)}</span>${oppLogo(m.opp,'md')}</div>
     <div class="lv-clock">
       <span class="ld ${m.clock.running?'on':''}"></span><span class="t num" id="liveClock">${fmtClock(elapsed(m))}</span>
       <span class="per">${ended?'Terminado':m.clock.half+'.ª parte'}</span>
@@ -1086,7 +1155,7 @@ function vAnalise(m){
   ${m.season?`<div class="mhead"><div><h1>${esc(m.home)} <em>Época ${seasonLabel(S.season)}</em></h1>
     <div class="meta">${m.n} jogo(s) · ${rangeLabel()} · ${m.events.length} acções · golos ${s.goals} marcados, ${s.goalsAdv} sofridos</div></div>
     <div class="sp row">${scopeBar()}<button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`
-  :`<div class="mhead"><div><h1>${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}</h1>
+  :`<div class="mhead"><div><h1 class="lg-h1">${clubLogo('md')}${esc(m.home)} <em>${sc?sc[0]+'–'+sc[1]:'vs'}</em> ${esc(m.opp)}${oppLogo(m.opp,'md')}</h1>
     <div class="meta">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''} · ${esc(S.team?S.team.name:'')} · ${m.events.length} acções${m.locked?' · trancado':''}${m.scoreUnknown&&!sc?' · resultado não registado':''}</div></div>
     <div class="sp row">${scopeBar()}<button class="btn pri" data-pdf>Criar PDF do jogo</button><button class="btn" data-exp="eventos">Exportar acções (CSV)</button><button class="btn" data-exp="resumo">Exportar resumo (CSV)</button></div></div>`}
   ${m.note&&!m.season?`<div class="banner">${esc(m.note)}</div>`:''}
@@ -1145,7 +1214,7 @@ function vPdf(m){
   const gen=new Date().toLocaleString('pt-PT',{dateStyle:'short',timeStyle:'short'});
   return `<div class="rp-cover">
       <div class="rp-brand"><b>${esc(S.club?S.club.name:'M Arte FC')}</b><span>${esc(S.team?S.team.name:'')} · Relatório do jogo</span></div>
-      <div class="rp-score"><span>${esc(m.home)}</span><b>${sc?sc[0]+' – '+sc[1]:'vs'}</b><span>${esc(m.opp)}</span></div>
+      <div class="rp-score"><span>${clubLogo('xl')}${esc(m.home)}</span><b>${sc?sc[0]+' – '+sc[1]:'vs'}</b><span>${oppLogo(m.opp,'xl')}${esc(m.opp)}</span></div>
       <div class="rp-meta">${[fmtDate(m.date),m.time,m.comp,(m.halfLen||45)+' min por parte',m.events.length+' acções registadas',s.poss!=null?'posse '+s.poss+'%':''].filter(Boolean).map(esc).join(' · ')}</div>
       ${m.note?`<p class="rp-note">${esc(m.note)}</p>`:''}
     </div>
@@ -1167,7 +1236,8 @@ function makePdf(m){
   const done=()=>{ document.body.classList.remove('printing'); document.title=old; el.innerHTML=''; window.removeEventListener('afterprint',done); };
   window.addEventListener('afterprint',done);
   toast('Escolha "Guardar como PDF" no destino da impressão.');
-  setTimeout(()=>window.print(),250);
+  const imgs=[...el.querySelectorAll('img')], wait=imgs.map(i=>i.complete?Promise.resolve():new Promise(r=>{ i.onload=i.onerror=r; }));
+  Promise.race([Promise.all(wait),new Promise(r=>setTimeout(r,4000))]).then(()=>setTimeout(()=>window.print(),150));
 }
 function vIndividual(m){
   const rows=indiv(m).filter(r=>!r.gk||r.act>0),k=S.sortI.k,d=S.sortI.d;
@@ -1191,14 +1261,15 @@ function vJogos(){
   return `<div class="view">
   ${!list.length?`<div class="card empty"><h2>Ainda não há jogos</h2><p class="muted">${canEdit()?'Crie o primeiro jogo abaixo.':'Ainda não foram registados jogos desta equipa.'}</p></div>`:''}
   ${list.length?`<section><div class="sec-h">Jogos · ${esc(S.team.name)} <span class="pill">${list.length}</span></div><div class="mlist">${list.map(m=>{ const sc=score(m); return `<div class="mcard ${m.id===S.cur?'cur':''}">
-    <span class="note">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''}</span><span class="t">${esc(m.home)} vs ${esc(m.opp)}</span>
+    <span class="note">${esc(fmtDate(m.date))}${m.time?' · '+esc(m.time):''}${m.comp?' · '+esc(m.comp):''}</span><span class="t mc-t">${clubLogo('sm')}${esc(m.home)} <i>vs</i> ${oppLogo(m.opp,'sm')}${esc(m.opp)}</span>
     <div class="row"><span class="s">${sc?sc[0]+'–'+sc[1]:'–:–'}</span><span class="pill">${esc(m.status||'')}</span><span class="pill">${m.events.length} acções</span>${m.locked?'<span class="pill">Trancado</span>':''}</div>
     <div class="row">${m.id===S.cur?'<span class="pill" style="background:var(--acc);color:var(--on-red)">Jogo activo</span>':`<button class="btn sm pri" data-open="${m.id}">Abrir</button>`}
       <a class="btn sm" href="#analise" data-open="${m.id}" style="text-decoration:none">Análise</a>${m.status==='terminado'?`<button class="btn sm" data-pdfm="${m.id}">PDF</button>`:''}
       ${isAdmin()?(S.confirm==='m'+m.id?`<span class="confirm">Apagar este jogo? <button class="btn sm pri" data-delm="${m.id}">Apagar</button><button class="btn sm" data-noconf>Não</button></span>`:`<button class="btn sm ghost" data-conf="m${m.id}">Apagar</button>`):''}</div></div>`; }).join('')}</div></section>`:''}
   ${canEdit()?`<section class="card"><h2>Novo jogo · ${esc(S.team.name)}</h2><form id="newMatch" class="form">
     <label class="fl">Equipa<input class="inp" id="nm-home" value="${esc((S.club.short_name&&S.club.short_name.length>3?S.club.short_name:S.club.name).toUpperCase())}" required></label>
-    <label class="fl">Adversário<input class="inp" id="nm-opp" placeholder="Nome do adversário" required></label>
+    <label class="fl">Adversário<input class="inp" id="nm-opp" placeholder="Nome do adversário" required list="oppList" autocomplete="off"><datalist id="oppList">${(S.opps||[]).map(o=>`<option value="${esc(o.name)}">`).join('')}</datalist></label>
+    <label class="fl">Logótipo do adversário (opcional)<input class="inp" id="nm-logo" type="file" accept="image/*"></label>
     <label class="fl">Data<input class="inp" id="nm-date" type="date" value="${today()}"></label>
     <label class="fl">Hora<input class="inp" id="nm-time" placeholder="10h00"></label>
     <label class="fl">Competição<input class="inp" id="nm-comp" placeholder="Campeonato, Taça, Amigável…"></label>
@@ -1258,6 +1329,7 @@ function vClube(){
   return `<div class="view">
   <div class="mhead"><div><h1>${esc(c.name)}</h1><div class="meta">Estado: <span class="${clubActive(c)?'st-ativo':'st-suspenso'}">${clubActive(c)?'Activo':'Suspenso'}</span>${c.paid_until?' · mensalidade paga até '+fmtDate(c.paid_until):''} · Relatórios IA este mês: ${S.aiCount}${c.ai_enabled?' de '+c.ai_monthly_limit:' (IA não incluída)'}</div></div></div>
   ${msg?`<div class="banner ${msg.err?'err':'ok'}">${esc(msg.t)}</div>`:''}
+  ${vLogos()}
   <section class="card"><h2>Equipa técnica e acessos <span class="pill">${S.members.length}</span></h2>
     <div class="tscroll"><table class="st"><thead><tr><th class="l">Nome</th><th class="l">Email</th><th class="l">Perfil</th><th></th></tr></thead><tbody>
     ${S.members.map(u=>{ const self=u.user_id===S.session.user.id; return `<tr><td class="l">${esc(u.full_name||'—')}</td><td class="l">${esc(u.email||'')}</td>
@@ -1445,6 +1517,7 @@ document.addEventListener('click', async ev=>{
   else if(d.mapmode){ S.mapMode=d.mapmode==='heat'?'heat':'pts'; render(); }
   else if(d.heatt){ S.heatType=d.heatt; render(); }
   else if(d.pdf!==undefined){ makePdf(M()); }
+  else if(d.dellogo){ if(S.confirm!=='lg'+d.dellogo+(d.name||'')){ S.confirm='lg'+d.dellogo+(d.name||''); t.textContent='Confirmar remoção?'; setTimeout(()=>{ if(S.confirm==='lg'+d.dellogo+(d.name||'')){ S.confirm=null; render(); } },3500); return; } S.confirm=null; removeLogo(d.dellogo,d.name); }
   else if(d.pdfm){ makePdf(S.matches[d.pdfm]); }
   else if(d.pfpos!==undefined){ S.pfPos=d.pfpos; render(); }
   else if(d.print!==undefined){ document.body.classList.add('print-ficha'); window.print(); setTimeout(()=>document.body.classList.remove('print-ficha'),500); }
@@ -1499,6 +1572,11 @@ document.addEventListener('submit', async ev=>{
     if(error){ S.loginErr=/invalid/i.test(error.message)?'Email ou palavra-passe errados.':error.message; render(); }
     return;
   }
+  if(f.id==='addOpp'){
+    const name=g('ao-name'), file=$('ao-file').files[0]; if(!name) return;
+    try{ if(file) await uploadLogo('opp',name,file); else { await ensureOpp(name); toast('Adversário adicionado.'); render(); } }catch(e){ toast('Não foi possível adicionar: '+(e.message||e)); }
+    return;
+  }
   if(f.id==='newMatch'){
     const row={club_id:S.club.id,team_id:S.team.id,home:g('nm-home')||S.club.name,opp:g('nm-opp')||'Adversário',date:g('nm-date')||null,time:g('nm-time'),comp:g('nm-comp'),half_len:+g('nm-half')||45,status:'nova',
       data:{clock:{half:1,running:false,startedAt:null,base:0},poss:{cur:null,since:null,us:0,opp:0},events:[]}};
@@ -1508,6 +1586,7 @@ document.addEventListener('submit', async ev=>{
     const { data, error } = await sb.from('matches').insert(row).select().single();
     if(error){ toast('Não foi possível criar o jogo: '+error.message); return; }
     S.callup={};
+    const lf=$('nm-logo')&&$('nm-logo').files[0]; if(lf) await uploadLogo('opp',row.opp,lf); else { try{ await ensureOpp(row.opp); }catch(e){} }
     S.matches[data.id]=fromRow(data); S.cur=data.id; location.hash='#registo'; render(); toast('Jogo criado. Carregue em Iniciar quando o árbitro apitar.'); return;
   }
   if(f.id==='addP'){
@@ -1566,6 +1645,8 @@ document.addEventListener('change', async ev=>{
     else if(d.luslot!==undefined){ const k=+d.luslot, v=el.value||null; const j=lu.slots.indexOf(v); if(v&&j>=0&&j!==k) lu.slots[j]=lu.slots[k]||null; lu.slots[k]=v; }
     else { lu.override=lu.override||{}; if(el.value==='') delete lu.override[d.luov]; else lu.override[d.luov]=Math.max(0,Math.min(10,+el.value)); }
     touch(m); render(); return; }
+  if(d.logo&&el.files&&el.files[0]){ const file=el.files[0]; el.value=''; await uploadLogo(d.logo,d.name,file); return; }
+  if(el.id==='ao-file'&&el.files&&el.files[0]){ el.parentElement.firstChild.textContent='Logótipo: '+el.files[0].name.slice(0,24)+' '; return; }
   if(d.photo&&el.files&&el.files[0]){
     const p=S.players.find(x=>x.id===d.photo); toast('A carregar a foto…');
     try{ const blob=await resizeImage(el.files[0]); const path=`${S.club.id}/${p.id}.jpg`;

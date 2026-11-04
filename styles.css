@@ -876,3 +876,32 @@ main.gut{min-width:0;width:100%}
 .rp .g-map>.view>.card{break-inside:avoid}
 @media print{html,body{background:#fff!important}}
 @media print{:root,html,body{color-scheme:light!important;background:#fff!important}}
+
+/* ---- logótipos de clube e adversários ---- */
+.lg{display:inline-grid;place-items:center;flex:none;width:28px;height:28px;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.06);border:var(--glass-b);vertical-align:middle}
+.lg img{width:100%;height:100%;object-fit:contain;padding:2px}
+.lg>span{font-family:var(--lv-cond);font-weight:700;font-size:11px;color:var(--muted);letter-spacing:.02em}
+.lg.sm{width:22px;height:22px;border-radius:6px}.lg.sm>span{font-size:9px}
+.lg.md{width:40px;height:40px;border-radius:10px}.lg.md>span{font-size:14px}
+.lg.xl{width:88px;height:88px;border-radius:18px}.lg.xl>span{font-size:28px}
+.lg:has(img){background:rgba(255,255,255,.92);border-color:transparent}
+.brand-logo{width:38px;height:38px;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.92);display:grid;place-items:center;flex:none}
+.brand-logo img{width:100%;height:100%;object-fit:contain;padding:3px}
+.lv-sb{gap:10px}
+.mc-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.mc-t i{font-style:normal;color:var(--muted);font-weight:500}
+.lg-h1{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lg-club{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.lg-club b{font-size:18px}
+.lg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.lg-row{display:flex;align-items:center;gap:12px;padding:8px 10px;border:var(--glass-b);border-radius:12px;background:rgba(255,255,255,.03);min-width:0}
+.lg-n{display:flex;flex-direction:column;min-width:0;flex:1}
+.lg-n b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lg-n small{color:var(--muted);font-size:12px}
+.lg-upl{cursor:pointer}.lg-upl:focus-within,.btn:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.rp-score span{display:flex;flex-direction:column;align-items:center;gap:8px}
+.rp .lg:has(img){background:#fff;border:1px solid var(--line)}
+.lg-row{flex-wrap:wrap}
+.lg-n{min-width:150px}
+.lg-row>.row{margin-left:auto;gap:6px}
+.lg-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+@media (max-width:420px){.lg-list{grid-template-columns:minmax(0,1fr)}}
