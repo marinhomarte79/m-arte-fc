@@ -73,10 +73,15 @@ const matchRO = m => !canEdit() || (m && m.locked && !isAdmin());
 async function boot(){
   const { data } = await sb.auth.getSession();
   S.session = data.session;
-  sb.auth.onAuthStateChange((ev, session)=>{ const had=!!S.session; S.session=session; if(!session){ resetState(); render(); } else if(!had){ afterLogin(); } });
+  sb.auth.onAuthStateChange((ev, session)=>{
+    const prevId=S.session&&S.session.user&&S.session.user.id, newId=session&&session.user&&session.user.id;
+    S.session=session;
+    if(!session){ resetState(); render(); }
+    else if(prevId!==newId){ resetState(); afterLogin(); }   /* outra conta entrou (ex.: noutro separador): recarregar perfil e permissões */
+  });
   if(S.session) await afterLogin(); else render();
 }
-function resetState(){ Object.assign(S,{profile:null,isSuper:false,clubs:[],myRoles:{},club:null,teams:[],team:null,players:[],matches:{},cur:null,pending:null,members:[]}); }
+function resetState(){ S.admin={users:null,aiByClub:{},memCount:{}}; S.logos={club:{},opp:{}}; S.photos={}; S.lu11Open={}; S.preLoc=null; S.prePl=null; S.confirm=null; S.fichaEdit=false; Object.assign(S,{profile:null,isSuper:false,clubs:[],myRoles:{},club:null,teams:[],team:null,players:[],matches:{},cur:null,pending:null,members:[]}); }
 async function afterLogin(){
   const u=S.session.user;
   const [{data:prof},{data:mems},{data:clubs}] = await Promise.all([
