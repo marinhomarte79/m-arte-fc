@@ -1066,7 +1066,7 @@ const ICON={
   admin:ic('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
   conta:ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
 };
-const VIEWS=[['inicio','Início',()=>true],['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>true]];
+const VIEWS=[['inicio','Início',()=>true],['registo','Registo ao vivo',()=>canEdit()],['analise','Análise',()=>true],['individual','Individual',()=>true],['auto','Autoanálise',()=>true],['jogos','Jogos',()=>true],['plantel','Plantel',()=>true],['clube','Clube',()=>isAdmin()],['admin','Super-admin',()=>S.isSuper],['conta','A minha conta',()=>S.isSuper]];
 function view(){ const h=location.hash.slice(1); if(h==='jogador'&&S.playerId&&S.players.some(p=>p.id===S.playerId)) return 'jogador'; const v=VIEWS.find(x=>x[0]===h&&x[2]()); return v?h:'inicio'; }
 function render(){
   const app=$('app');
@@ -1524,7 +1524,7 @@ function vClube(){
       <label class="fl">Palavra-passe inicial<input class="inp mono" id="au-pass" value="${genPass()}" required minlength="8"></label>
       <button class="btn pri" type="submit">Criar acesso</button>
     </form>
-    <p class="note" style="margin:8px 0 0">Entregue o email e a palavra-passe à pessoa; ela pode mudá-la em "A minha conta". Treinador e analista registam jogos; só leitura consulta; admin gere tudo no clube.</p>
+    <p class="note" style="margin:8px 0 0">Entregue o email e a palavra-passe à pessoa. Pode repor a palavra-passe da equipa técnica aqui; para a conta do admin do clube, contacte a M Arte Design. Treinador e analista registam jogos; só leitura consulta; admin gere tudo no clube.</p>
   </section>
   <section class="card"><h2>Equipas e escalões <span class="pill">${S.teams.length}</span></h2>
     <div class="tscroll"><table class="st"><thead><tr><th class="l">Nome</th><th class="l">Duração da parte</th><th>Jogadores</th><th>Jogos</th><th></th></tr></thead><tbody>
